@@ -1,0 +1,113 @@
+---
+import { getCollection } from 'astro:content';
+import PostCard from '../../components/PostCard.astro';
+import SearchPanel from '../../components/SearchPanel.astro';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { isPublished, sortNewest } from '../../lib/posts';
+
+const posts = sortNewest(
+  (await getCollection('posts')).filter((post) => isPublished(post, 'production'))
+);
+---
+
+<BaseLayout
+  title="Articles"
+  description="Search practical Applied AI field notes by topic and difficulty."
+>
+  <div class="shell articles-shell">
+    <header class="articles-hero">
+      <p class="eyebrow">Field notes from the workbench</p>
+      <h1 class="display">Articles</h1>
+      <p>Search practical walkthroughs and explanations, or browse every published field note below.</p>
+    </header>
+
+    <div class="articles-discovery">
+      <SearchPanel />
+
+      <section data-static-article-list aria-labelledby="all-articles-title">
+        <div class="articles-list__heading">
+          <h2 id="all-articles-title">All articles</h2>
+          <p>{posts.length} {posts.length === 1 ? 'field note' : 'field notes'}</p>
+        </div>
+        {posts.length > 0 ? (
+          <div class="post-grid">
+            {posts.map((post) => (
+              <div data-topic={post.data.topic} data-difficulty={post.data.difficulty}>
+                <PostCard post={post} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p>No published field notes yet.</p>
+        )}
+      </section>
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .articles-shell {
+    border-right: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+
+  .articles-hero {
+    padding: clamp(3.5rem, 9vw, 7rem) clamp(1.25rem, 5vw, 4rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .articles-hero .display {
+    margin-block: 1rem 1.5rem;
+  }
+
+  .articles-hero > p:last-child {
+    max-width: 44rem;
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+  }
+
+  .articles-discovery {
+    display: grid;
+    gap: clamp(2.5rem, 6vw, 4.5rem);
+    padding: clamp(2rem, 6vw, 4rem) clamp(1rem, 4vw, 2.5rem);
+  }
+
+  .articles-list__heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .articles-list__heading h2 {
+    margin: 0;
+    font: 800 clamp(2rem, 5vw, 3.5rem) / 0.95 var(--font-display);
+    text-transform: uppercase;
+  }
+
+  .articles-list__heading p {
+    margin: 0;
+    color: var(--ink-muted);
+    font: 700 0.7rem/1 var(--font-mono);
+    text-transform: uppercase;
+  }
+
+  [data-static-article-list] .post-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  @media (max-width: 48rem) {
+    .articles-shell {
+      border-right: 0;
+      border-left: 0;
+    }
+
+    [data-static-article-list] .post-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

@@ -1,0 +1,255 @@
+---
+import { difficulties, topics } from '../content.config';
+import { topicConfig } from '../config/site';
+
+const labelDifficulty = (difficulty: string) =>
+  difficulty.charAt(0).toUpperCase() + difficulty.slice(1);
+---
+
+<section class="search-panel" data-search-panel aria-labelledby="article-search-title">
+  <div class="search-panel__heading">
+    <div>
+      <p class="eyebrow">Search the field notes</p>
+      <h2 id="article-search-title">Find an article</h2>
+    </div>
+    <p data-search-summary aria-live="polite">Browse all articles below.</p>
+  </div>
+
+  <form class="search-panel__controls" data-search-form role="search">
+    <label class="search-panel__search">
+      <span>Search articles</span>
+      <input type="search" name="q" autocomplete="off" />
+    </label>
+    <label>
+      <span>Topic</span>
+      <select name="topic">
+        <option value="">All topics</option>
+        {topics.map((topic) => <option value={topic}>{topicConfig[topic].label}</option>)}
+      </select>
+    </label>
+    <label>
+      <span>Difficulty</span>
+      <select name="difficulty">
+        <option value="">All difficulties</option>
+        {difficulties.map((difficulty) => (
+          <option value={difficulty}>{labelDifficulty(difficulty)}</option>
+        ))}
+      </select>
+    </label>
+  </form>
+
+  <section class="search-panel__results" data-search-results aria-label="Search results" hidden>
+    <ol data-search-result-list></ol>
+    <p class="search-panel__empty" data-search-empty hidden>Try another term or remove a filter.</p>
+  </section>
+</section>
+
+<script is:inline type="module">
+  const root = document.querySelector('[data-search-panel]');
+  const staticArticles = document.querySelector('[data-static-article-list]');
+
+  if (root && staticArticles) {
+    const form = root.querySelector('[data-search-form]');
+    const input = form?.elements.namedItem('q');
+    const topic = form?.elements.namedItem('topic');
+    const difficulty = form?.elements.namedItem('difficulty');
+    const summary = root.querySelector('[data-search-summary]');
+    const resultsRegion = root.querySelector('[data-search-results]');
+    const resultList = root.querySelector('[data-search-result-list]');
+    const emptyState = root.querySelector('[data-search-empty]');
+
+    if (form && input && topic && difficulty && summary && resultsRegion && resultList && emptyState) {
+      summary.textContent = 'Loading article search…';
+      const initialTopic = new URLSearchParams(window.location.search).get('topic');
+      if (initialTopic && [...topic.options].some((option) => option.value === initialTopic)) {
+        topic.value = initialTopic;
+      }
+
+      const pagefindPromise = import('/pagefind/pagefind.js');
+      let debounceTimer = 0;
+      let requestNumber = 0;
+
+      const showFallback = () => {
+        staticArticles.hidden = false;
+        resultsRegion.hidden = true;
+        emptyState.hidden = true;
+        summary.textContent = 'Search is unavailable; browse all articles below.';
+      };
+
+      const renderResults = (results) => {
+        const fragment = document.createDocumentFragment();
+
+        for (const result of results) {
+          const item = document.createElement('li');
+          const link = document.createElement('a');
+          link.href = result.url;
+          link.textContent = result.meta.title || 'Untitled article';
+          item.append(link);
+          fragment.append(item);
+        }
+
+        resultList.replaceChildren(fragment);
+        emptyState.hidden = results.length !== 0;
+        summary.textContent = results.length === 1 ? '1 article found.' : `${results.length} articles found.`;
+        staticArticles.hidden = true;
+        resultsRegion.hidden = false;
+      };
+
+      const matchesEverySearchTerm = (result, query) => {
+        const terms = query.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+        if (terms.length === 0) return true;
+
+        const haystack = [result.content, ...Object.values(result.meta)]
+          .filter(Boolean)
+          .join(' ')
+          .toLocaleLowerCase();
+        return terms.every((term) => haystack.includes(term));
+      };
+
+      const runSearch = async () => {
+        const currentRequest = ++requestNumber;
+
+        try {
+          const pagefind = await pagefindPromise;
+          const query = input.value.trim();
+          const filters = {};
+          if (topic.value) filters.topic = topic.value;
+          if (difficulty.value) filters.difficulty = difficulty.value;
+
+          const response = await pagefind.search(query, { filters });
+          const results = await Promise.all(response.results.map((result) => result.data()));
+          const matchingResults = results.filter((result) => matchesEverySearchTerm(result, query));
+          if (currentRequest === requestNumber) renderResults(matchingResults);
+        } catch (error) {
+          console.error('Article search is unavailable.', error);
+          if (currentRequest === requestNumber) showFallback();
+        }
+      };
+
+      const scheduleSearch = () => {
+        window.clearTimeout(debounceTimer);
+        debounceTimer = window.setTimeout(() => void runSearch(), 150);
+      };
+
+      const updateFilterQuery = () => {
+        const params = new URLSearchParams(window.location.search);
+
+        for (const select of [topic, difficulty]) {
+          if (select.value) params.set(select.name, select.value);
+          else params.delete(select.name);
+        }
+
+        const query = params.toString();
+        window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}`);
+        scheduleSearch();
+      };
+
+      form.addEventListener('submit', (event) => event.preventDefault());
+      input.addEventListener('input', scheduleSearch);
+      topic.addEventListener('change', updateFilterQuery);
+      difficulty.addEventListener('change', updateFilterQuery);
+      scheduleSearch();
+    }
+  }
+</script>
+
+<style>
+  .search-panel {
+    padding: clamp(2rem, 5vw, 3.5rem);
+    border: 1px solid var(--rule);
+    background: var(--wash);
+  }
+
+  .search-panel__heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .search-panel__heading h2 {
+    margin: 0.6rem 0 0;
+    font: 800 clamp(2rem, 5vw, 3.5rem) / 0.95 var(--font-display);
+    text-transform: uppercase;
+  }
+
+  .search-panel__heading > p {
+    margin: 0;
+    color: var(--ink-muted);
+  }
+
+  .search-panel__controls {
+    display: grid;
+    grid-template-columns: minmax(15rem, 1fr) repeat(2, minmax(10rem, 0.45fr));
+    gap: 0.75rem;
+  }
+
+  .search-panel__controls label {
+    display: grid;
+    gap: 0.4rem;
+    color: var(--ink-muted);
+    font: 700 0.7rem/1.2 var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .search-panel__controls input,
+  .search-panel__controls select {
+    width: 100%;
+    min-height: 3rem;
+    padding: 0.65rem 0.8rem;
+    border: 1px solid var(--rule);
+    border-radius: 0;
+    color: var(--cluster);
+    background: var(--white);
+  }
+
+  .search-panel__results {
+    margin-top: 1.5rem;
+  }
+
+  .search-panel__results ol {
+    display: grid;
+    gap: 0.65rem;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .search-panel__results :global(li) {
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .search-panel__results :global(a) {
+    display: block;
+    padding: 1rem;
+    background: var(--white);
+    font: 800 clamp(1.25rem, 3vw, 1.8rem) / 1 var(--font-display);
+    text-decoration: none;
+    text-transform: uppercase;
+  }
+
+  .search-panel__results :global(a:hover) {
+    background: var(--signal);
+  }
+
+  .search-panel__empty {
+    margin: 0;
+    padding: 1rem;
+    border: 1px solid var(--rule);
+    background: var(--white);
+    font-weight: 700;
+  }
+
+  @media (max-width: 48rem) {
+    .search-panel__heading {
+      align-items: start;
+      flex-direction: column;
+    }
+
+    .search-panel__controls {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>
