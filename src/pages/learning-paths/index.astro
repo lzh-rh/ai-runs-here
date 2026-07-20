@@ -28,7 +28,11 @@ const paths = (Object.keys(learningPathConfig) as LearningPathId[])
     <header class="paths-hero">
       <p class="eyebrow">Guided routes through the workbench</p>
       <h1 class="display">Learning paths</h1>
-      <p>Move through related published field notes in a deliberate order, from useful context to deeper hands-on notes.</p>
+      <p>
+        {mode === 'development'
+          ? 'Preview ordered field notes; drafts are clearly marked and are not published.'
+          : 'Move through related published field notes in a deliberate order, from useful context to deeper hands-on notes.'}
+      </p>
     </header>
 
     <div class="paths-list">
@@ -46,7 +50,10 @@ const paths = (Object.keys(learningPathConfig) as LearningPathId[])
               <li>
                 <span class="path-steps__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
                 <div class="path-steps__body">
-                  <p class="path-steps__meta">{post.data.difficulty} · {post.data.estimatedMinutes} minutes</p>
+                  <p class="path-steps__meta">
+                    {post.data.draft && <span class="path-steps__draft">Draft preview · </span>}
+                    {post.data.difficulty} · {post.data.estimatedMinutes} minutes
+                  </p>
                   <h3><a href={`/articles/${post.id}/`}>{post.data.title}</a></h3>
                   <p>{post.data.description}</p>
                 </div>
@@ -151,6 +158,10 @@ const paths = (Object.keys(learningPathConfig) as LearningPathId[])
     font: 700 0.67rem/1 var(--font-mono);
     letter-spacing: 0.05em;
     text-transform: uppercase;
+  }
+
+  .path-steps__draft {
+    color: var(--cluster);
   }
 
   .path-steps h3 {

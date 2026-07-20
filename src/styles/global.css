@@ -375,6 +375,12 @@ textarea {
   color: var(--cluster);
 }
 
+.post-card__draft {
+  padding: 0.15rem 0.35rem;
+  background: var(--cluster);
+  color: var(--paper);
+}
+
 .post-card__title {
   margin: auto 0 0;
   font: 800 clamp(1.7rem, 3.2vw, 2.65rem) / 0.98 var(--font-display);

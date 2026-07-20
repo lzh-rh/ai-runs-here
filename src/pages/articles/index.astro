@@ -19,7 +19,11 @@ const posts = sortNewest(
     <header class="articles-hero">
       <p class="eyebrow">Field notes from the workbench</p>
       <h1 class="display">Articles</h1>
-      <p>Search practical walkthroughs and explanations, or browse every published field note below.</p>
+      <p>
+        {mode === 'development'
+          ? 'Search available field notes, including clearly marked draft previews.'
+          : 'Search practical walkthroughs and explanations, or browse every published field note below.'}
+      </p>
     </header>
 
     <div class="articles-discovery">

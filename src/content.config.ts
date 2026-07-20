@@ -4,8 +4,10 @@ import { z } from 'astro/zod';
 
 export const topics = ['openshift-ai', 'agentic-ai', 'mcp', 'lightspeed'] as const;
 export const difficulties = ['beginner', 'intermediate', 'advanced'] as const;
+export const contentKinds = ['lab', 'guide'] as const;
 
-export const postSchema = z.object({
+const postFields = z.object({
+  kind: z.enum(contentKinds),
   title: z.string().min(8),
   description: z.string().min(20).max(180),
   publishedDate: z.coerce.date(),
@@ -27,6 +29,16 @@ export const postSchema = z.object({
   image: z.string().optional()
 });
 
+export const postSchema = postFields.superRefine((post, context) => {
+  if (post.kind === 'lab' && !post.draft && post.testedVersions.length === 0) {
+    context.addIssue({
+      code: 'custom',
+      path: ['testedVersions'],
+      message: 'Published labs require at least one tested version.'
+    });
+  }
+});
+
 const posts = defineCollection({
   loader: glob({ pattern: '**/*.{md,mdx}', base: './src/content/posts' }),
   schema: postSchema
@@ -35,3 +47,4 @@ const posts = defineCollection({
 export const collections = { posts };
 export type Topic = (typeof topics)[number];
 export type Difficulty = (typeof difficulties)[number];
+export type ContentKind = (typeof contentKinds)[number];

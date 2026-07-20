@@ -36,7 +36,7 @@ const formatDate = (date: Date) =>
   title={post.data.title}
   description={post.data.description}
   image={post.data.image}
-  publishedDate={post.data.publishedDate}
+  publishedDate={post.data.draft ? undefined : post.data.publishedDate}
   updatedDate={post.data.updatedDate}
   article
 >
@@ -47,7 +47,7 @@ const formatDate = (date: Date) =>
 
       <header class="article-header">
         <div class="article-header__main">
-          <p class="eyebrow">{topic.label} · Field note</p>
+          <p class="eyebrow">{topic.label} · {post.data.draft ? 'Draft preview' : 'Field note'}</p>
           <h1 data-pagefind-meta="title">{post.data.title}</h1>
           <p class="article-summary">{post.data.description}</p>
         </div>
@@ -59,6 +59,10 @@ const formatDate = (date: Date) =>
               <dd>{topic.label}</dd>
             </div>
             <div>
+              <dt>Type</dt>
+              <dd>{post.data.kind === 'lab' ? 'Lab' : 'Guide'}</dd>
+            </div>
+            <div>
               <dt>Difficulty</dt>
               <dd>{post.data.difficulty}</dd>
             </div>
@@ -67,7 +71,7 @@ const formatDate = (date: Date) =>
               <dd>{post.data.estimatedMinutes} minutes</dd>
             </div>
             <div>
-              <dt>Published</dt>
+              <dt>{post.data.draft ? 'Draft date' : 'Published'}</dt>
               <dd><time datetime={post.data.publishedDate.toISOString()}>{formatDate(post.data.publishedDate)}</time></dd>
             </div>
             {post.data.updatedDate && (

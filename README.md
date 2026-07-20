@@ -41,6 +41,7 @@ Posts are Markdown or MDX files under `src/content/posts/`. This template includ
 
 ```yaml
 ---
+kind: lab
 title: "Connect a service to an Applied AI workflow"
 description: "A concise summary between 20 and 180 characters for article lists, search, and social metadata."
 publishedDate: 2026-07-20
@@ -66,7 +67,7 @@ image: /images/example-social.svg
 ---
 ```
 
-Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`. An explanatory or editorial guide that reports no product test may use `testedVersions: []`; the tested-versions panel is then omitted. A product lab must remain a draft until its exact versions and results have been reviewed.
+Use `kind: lab` for hands-on product procedures and `kind: guide` for explanatory or editorial material. Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`. A guide or draft lab may use `testedVersions: []`; the tested-versions panel is then omitted. The schema rejects a published lab with no tested version, and a product lab must remain a draft until its exact versions and results have been reviewed.
 
 ## Author workflows
 

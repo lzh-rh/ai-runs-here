@@ -122,7 +122,7 @@ describe('article metadata', () => {
     expect(baseLayout).toContain('property="article:published_time"');
     expect(baseLayout).toContain('property="article:modified_time"');
     expect(baseLayout).toContain('new URL(Astro.url.pathname, Astro.site)');
-    expect(postLayout).toContain('publishedDate={post.data.publishedDate}');
+    expect(postLayout).toContain('publishedDate={post.data.draft ? undefined : post.data.publishedDate}');
     expect(postLayout).toContain('updatedDate={post.data.updatedDate}');
   });
 });

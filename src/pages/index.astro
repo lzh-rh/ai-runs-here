@@ -67,7 +67,11 @@ const learningPaths = (Object.keys(learningPathConfig) as LearningPathId[])
       <section class="section-block" aria-labelledby="learning-paths-title">
         <div class="section-heading">
           <h2 id="learning-paths-title">Follow a learning path</h2>
-          <p>Move through related published field notes in a deliberate order.</p>
+          <p>
+            {mode === 'development'
+              ? 'Preview related field notes in order; draft cards are clearly marked.'
+              : 'Move through related published field notes in a deliberate order.'}
+          </p>
         </div>
         <div class="home-path-grid">
           {learningPaths.map((path) => (

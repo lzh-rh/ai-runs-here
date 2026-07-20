@@ -72,17 +72,33 @@ describe('publication boundaries and truthful content', () => {
     const guidePath = 'src/content/posts/start-learning-applied-ai-on-openshift.mdx';
 
     expect(draft).toMatch(/\ndraft: true\n/);
+    expect(draft).toMatch(/\nkind: lab\n/);
     expect(draft).not.toMatch(/verified (?:OpenShift Lightspeed )?query/i);
     expect(draft).toContain('This draft does not connect an MCP server or perform a Lightspeed query.');
     expect(existsSync(pathFromRoot(guidePath)), 'a truthful published guide should exist').toBe(true);
     if (existsSync(pathFromRoot(guidePath))) {
       expect(source(guidePath)).toMatch(/\ndraft: false\n/);
+      expect(source(guidePath)).toMatch(/\nkind: guide\n/);
       expect(source(guidePath)).toContain('This is a reading guide, not a product lab.');
     }
   });
 });
 
 describe('reviewed interface contracts', () => {
+  it('clearly labels draft cards, path steps, and article metadata during development', () => {
+    const postCard = source('src/components/PostCard.astro');
+    const learningPaths = source('src/pages/learning-paths/index.astro');
+    const article = source('src/layouts/PostLayout.astro');
+
+    expect(postCard).toContain('post.data.draft');
+    expect(postCard).toContain('Draft preview');
+    expect(learningPaths).toContain('post.data.draft');
+    expect(learningPaths).toContain('Draft preview');
+    expect(learningPaths).toContain("mode === 'development'");
+    expect(article).toContain("post.data.draft ? 'Draft preview' : 'Field note'");
+    expect(article).toContain("post.data.draft ? 'Draft date' : 'Published'");
+    expect(article).toContain('publishedDate={post.data.draft ? undefined : post.data.publishedDate}');
+  });
   it('reveals a visible Giscus failure message on timeout or script error', () => {
     const comments = source('src/components/GiscusComments.astro');
 

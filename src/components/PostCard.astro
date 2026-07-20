@@ -9,12 +9,15 @@ interface Props {
 
 const { post, featured = false } = Astro.props;
 const topic = topicConfig[post.data.topic];
+const kind = post.data.kind === 'lab' ? 'Lab' : 'Guide';
 const difficulty = post.data.difficulty.charAt(0).toUpperCase() + post.data.difficulty.slice(1);
 ---
 
 <article class:list={['post-card', { 'post-card--featured': featured }]}>
   <div class="post-card__meta">
+    {post.data.draft && <span class="post-card__draft">Draft preview</span>}
     <span class="post-card__topic">{topic.label}</span>
+    <span>{kind}</span>
     <span>{difficulty}</span>
     <span>{post.data.estimatedMinutes} min</span>
   </div>

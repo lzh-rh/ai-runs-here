@@ -12,6 +12,12 @@ test('initial search state keeps the published article list visible', async ({ p
   await expect(page.locator('[data-search-results]')).toBeHidden();
 });
 
+test('production excludes draft articles and draft-preview badges', async ({ page }) => {
+  await page.goto('/articles/');
+  await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toHaveCount(0);
+  await expect(page.getByText('Draft preview')).toHaveCount(0);
+});
+
 test('clearing every search control restores the published article list', async ({ page }) => {
   await page.goto('/articles/');
   await page.getByLabel('Search articles').fill('evidence');
