@@ -69,6 +69,8 @@ image: /images/example-social.svg
 
 Use `kind: lab` for hands-on product procedures and `kind: guide` for explanatory or editorial material. Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`. A guide or draft lab may use `testedVersions: []`; the tested-versions panel is then omitted. The schema rejects a published lab with no tested version, and a product lab must remain a draft until its exact versions and results have been reviewed.
 
+The schema trims frontmatter text before validating it, rejects whitespace-only values, and requires `updatedDate` to be the same as or later than `publishedDate`.
+
 ## Author workflows
 
 ### Create
@@ -153,7 +155,7 @@ All current integration values are public identifiers, not secrets. If a future 
 ## Configure and test Buttondown
 
 1. Create or select a Buttondown newsletter and note its public username.
-2. Set `PUBLIC_BUTTONDOWN_USERNAME` to the username only, not a URL. Configure it for Production in Vercel.
+2. Set `PUBLIC_BUTTONDOWN_USERNAME` to the username slug only, not a URL. The slug may contain letters, numbers, hyphens, and underscores. Configure it for Production in Vercel.
 3. For a local integration test, run:
 
    ```bash

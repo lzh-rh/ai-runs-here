@@ -1,13 +1,10 @@
 ---
-import { getPublicIntegrationConfig } from '../config/site';
+import { getPublicIntegrationConfig, resolveButtondownUsername } from '../config/site';
 
-const { buttondownUsername } = getPublicIntegrationConfig(import.meta.env);
-
-if (!buttondownUsername && import.meta.env.PROD) {
-  throw new Error(
-    'PUBLIC_BUTTONDOWN_USERNAME is required for production builds. Set it to the public Buttondown username.'
-  );
-}
+const { buttondownUsername: configuredButtondownUsername } = getPublicIntegrationConfig(import.meta.env);
+const buttondownUsername = resolveButtondownUsername(configuredButtondownUsername, {
+  production: import.meta.env.PROD
+});
 
 const action = buttondownUsername
   ? `https://buttondown.com/api/emails/embed-subscribe/${encodeURIComponent(buttondownUsername)}`

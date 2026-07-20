@@ -1,11 +1,11 @@
 import rss from '@astrojs/rss';
-import { getCollection } from 'astro:content';
 import { siteConfig } from '../config/site';
+import { getPostCollection } from '../lib/post-collection';
 import { isPublished, sortNewest } from '../lib/posts';
 
 export async function GET(context: { site?: URL }) {
   const posts = sortNewest(
-    (await getCollection('posts')).filter((post) => isPublished(post, 'production'))
+    (await getPostCollection()).filter((post) => isPublished(post, 'production'))
   );
 
   return rss({

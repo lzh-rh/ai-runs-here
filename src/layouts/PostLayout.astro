@@ -1,10 +1,10 @@
 ---
 import type { MarkdownHeading } from 'astro';
-import { getCollection } from 'astro:content';
 import CodeCopy from '../components/CodeCopy.astro';
 import GiscusComments from '../components/GiscusComments.astro';
 import PostCard from '../components/PostCard.astro';
 import { topicConfig } from '../config/site';
+import { getPostCollection } from '../lib/post-collection';
 import { isPublished, sortNewest, type Post } from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
 
@@ -18,7 +18,7 @@ const { post, headings, neighbors } = Astro.props;
 const tableOfContents = headings.filter(({ depth }) => depth === 2 || depth === 3);
 const mode = import.meta.env.PROD ? 'production' : 'development';
 const relatedPosts = sortNewest(
-  (await getCollection('posts')).filter(
+  (await getPostCollection()).filter(
     (candidate) =>
       isPublished(candidate, mode) &&
       candidate.id !== post.id &&
@@ -289,7 +289,7 @@ const formatDate = (date: Date) =>
   }
 
   .article-reading-grid--without-toc {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .article-toc {
@@ -335,8 +335,10 @@ const formatDate = (date: Date) =>
   }
 
   .article-prose {
+    min-width: 0;
     width: min(100% - clamp(2rem, 8vw, 7rem), 48rem);
     padding-block: clamp(3rem, 7vw, 6rem);
+    overflow-wrap: anywhere;
   }
 
   .article-reading-grid--without-toc .article-prose {
@@ -394,10 +396,19 @@ const formatDate = (date: Date) =>
     background: var(--wash);
     font-family: var(--font-mono);
     font-size: 0.88em;
+    overflow-wrap: anywhere;
+  }
+
+  .article-prose pre {
+    min-width: 0;
+    width: 100%;
+    overflow-wrap: normal;
   }
 
   .article-prose pre code {
     font: 0.84rem/1.7 var(--font-mono);
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .path-neighbors {
@@ -464,7 +475,7 @@ const formatDate = (date: Date) =>
     }
 
     .article-reading-grid {
-      grid-template-columns: 1fr;
+      grid-template-columns: minmax(0, 1fr);
     }
 
     .article-toc {

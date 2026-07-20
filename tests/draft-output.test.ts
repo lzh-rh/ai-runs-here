@@ -21,7 +21,7 @@ describe('production publication boundary', () => {
     const feed = source('src/pages/rss.xml.ts');
 
     expect(feed).toContain("isPublished(post, 'production')");
-    expect(feed).toMatch(/sortNewest\([\s\S]*getCollection\('posts'\)[\s\S]*\.filter/);
+    expect(feed).toMatch(/sortNewest\([\s\S]*getPostCollection\(\)[\s\S]*\.filter/);
     expect(feed).toContain("link: `/articles/${post.id}/`");
   });
 });

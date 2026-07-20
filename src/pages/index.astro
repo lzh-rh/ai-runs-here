@@ -1,17 +1,17 @@
 ---
-import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
 import NewsletterForm from '../components/NewsletterForm.astro';
 import PostCard from '../components/PostCard.astro';
 import TerminalStatus from '../components/TerminalStatus.astro';
 import TopicRail from '../components/TopicRail.astro';
 import { learningPathConfig, siteConfig } from '../config/site';
+import { getPostCollection } from '../lib/post-collection';
 import { getFeaturedPost, getLearningPathGroups, isPublished, sortNewest } from '../lib/posts';
 
 type LearningPathId = keyof typeof learningPathConfig;
 
 const mode = import.meta.env.PROD ? 'production' : 'development';
-const posts = (await getCollection('posts')).filter((post) => isPublished(post, mode));
+const posts = (await getPostCollection()).filter((post) => isPublished(post, mode));
 const featuredPost = getFeaturedPost(posts);
 const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?.id).slice(0, 4);
 const learningPathGroups = getLearningPathGroups(posts);

@@ -1,13 +1,13 @@
 ---
-import { getCollection } from 'astro:content';
 import PostCard from '../../components/PostCard.astro';
 import SearchPanel from '../../components/SearchPanel.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPostCollection } from '../../lib/post-collection';
 import { isPublished, sortNewest } from '../../lib/posts';
 
 const mode = import.meta.env.PROD ? 'production' : 'development';
 const posts = sortNewest(
-  (await getCollection('posts')).filter((post) => isPublished(post, mode))
+  (await getPostCollection()).filter((post) => isPublished(post, mode))
 );
 ---
 

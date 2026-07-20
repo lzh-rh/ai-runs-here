@@ -1,13 +1,13 @@
 ---
-import { getCollection } from 'astro:content';
 import { learningPathConfig } from '../../config/site';
 import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPostCollection } from '../../lib/post-collection';
 import { getLearningPathGroups, isPublished } from '../../lib/posts';
 
 type LearningPathId = keyof typeof learningPathConfig;
 
 const mode = import.meta.env.PROD ? 'production' : 'development';
-const posts = (await getCollection('posts')).filter((post) => isPublished(post, mode));
+const posts = (await getPostCollection()).filter((post) => isPublished(post, mode));
 const groups = getLearningPathGroups(posts);
 const paths = (Object.keys(learningPathConfig) as LearningPathId[])
   .map((id) => ({

@@ -51,9 +51,58 @@ describe('deployment artifact', () => {
     expect(pkg.scripts['check:deployment-artifact']).toBeDefined();
     expect(pkg.scripts.verify).toContain('check:deployment-artifact');
   });
+
+  it('indexes only article detail routes and still writes an empty article index', async () => {
+    const scriptUrl = pathFromRoot('scripts/build-pagefind.mjs');
+    expect(existsSync(scriptUrl), 'the scoped Pagefind build script should exist').toBe(true);
+    if (!existsSync(scriptUrl)) return;
+
+    const { buildArticleSearchIndex } = await import(scriptUrl.href);
+    const directory = await mkdtemp(join(tmpdir(), 'pagefind-scope-'));
+    const siteDirectory = join(directory, 'dist');
+    const outputDirectory = join(siteDirectory, 'pagefind');
+    await mkdir(join(siteDirectory, 'articles', 'published-post'), { recursive: true });
+    await mkdir(join(siteDirectory, 'about'), { recursive: true });
+    await writeFile(
+      join(siteDirectory, 'articles', 'published-post', 'index.html'),
+      '<html lang="en"><body><article data-pagefind-body>Published article</article></body></html>'
+    );
+    await writeFile(
+      join(siteDirectory, 'about', 'index.html'),
+      '<html lang="en"><body>About page must not be indexed</body></html>'
+    );
+
+    expect(await buildArticleSearchIndex({ siteDirectory, outputDirectory })).toBe(1);
+    expect(JSON.parse(await readFile(join(outputDirectory, 'pagefind-entry.json'), 'utf8')))
+      .toMatchObject({ languages: { en: { page_count: 1 } } });
+
+    const emptyDirectory = await mkdtemp(join(tmpdir(), 'pagefind-empty-scope-'));
+    const emptySite = join(emptyDirectory, 'dist');
+    const emptyOutput = join(emptySite, 'pagefind');
+    await mkdir(join(emptySite, 'about'), { recursive: true });
+    await writeFile(join(emptySite, 'about', 'index.html'), '<html><body>About only</body></html>');
+
+    expect(await buildArticleSearchIndex({ siteDirectory: emptySite, outputDirectory: emptyOutput })).toBe(0);
+    expect(JSON.parse(await readFile(join(emptyOutput, 'pagefind-entry.json'), 'utf8')))
+      .toMatchObject({ languages: {} });
+    expect(existsSync(join(emptyOutput, 'pagefind.js'))).toBe(true);
+  });
 });
 
 describe('publication boundaries and truthful content', () => {
+  it('routes every post collection read through the learning-path validator', () => {
+    for (const file of [
+      'src/pages/index.astro',
+      'src/pages/articles/[id].astro',
+      'src/pages/articles/index.astro',
+      'src/pages/learning-paths/index.astro',
+      'src/pages/rss.xml.ts',
+      'src/layouts/PostLayout.astro'
+    ]) {
+      expect(source(file), file).toContain('getPostCollection');
+    }
+  });
+
   it('uses the current build mode for every preview-facing post query', () => {
     for (const page of [
       'src/pages/articles/[id].astro',
@@ -154,5 +203,19 @@ describe('canonical site URL validation', () => {
       'valid absolute HTTP(S) origin'
     );
     expect(resolveSiteUrl('https://example.com', { production: true })).toBe('https://example.com');
+  });
+});
+
+describe('Buttondown configuration', () => {
+  it('trims a valid username slug and rejects invalid production values', async () => {
+    const { resolveButtondownUsername } = await import('../src/config/site');
+
+    expect(resolveButtondownUsername('  li-notes_1  ', { production: true })).toBe('li-notes_1');
+    expect(() => resolveButtondownUsername('   ', { production: true })).toThrow(
+      'PUBLIC_BUTTONDOWN_USERNAME is required'
+    );
+    expect(() => resolveButtondownUsername('https://buttondown.com/li', { production: true })).toThrow(
+      'valid Buttondown username slug'
+    );
   });
 });

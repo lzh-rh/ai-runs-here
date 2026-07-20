@@ -6,18 +6,20 @@ export const topics = ['openshift-ai', 'agentic-ai', 'mcp', 'lightspeed'] as con
 export const difficulties = ['beginner', 'intermediate', 'advanced'] as const;
 export const contentKinds = ['lab', 'guide'] as const;
 
+const trimmedString = z.string().trim();
+
 const postFields = z.object({
   kind: z.enum(contentKinds),
-  title: z.string().min(8),
-  description: z.string().min(20).max(180),
+  title: trimmedString.min(8),
+  description: trimmedString.min(20).max(180),
   publishedDate: z.coerce.date(),
   updatedDate: z.coerce.date().optional(),
   topic: z.enum(topics),
-  tags: z.array(z.string().min(1)).default([]),
+  tags: z.array(trimmedString.min(1)).default([]),
   difficulty: z.enum(difficulties),
   estimatedMinutes: z.number().int().positive(),
-  testedVersions: z.array(z.string().min(3)),
-  prerequisites: z.array(z.string().min(3)).default([]),
+  testedVersions: z.array(trimmedString.min(3)),
+  prerequisites: z.array(trimmedString.min(3)).default([]),
   draft: z.boolean().default(false),
   featured: z.boolean().default(false),
   learningPath: z
@@ -26,7 +28,9 @@ const postFields = z.object({
       order: z.number().int().positive()
     })
     .optional(),
-  image: z.string().optional()
+  image: trimmedString
+    .regex(/^\/(?!\/)\S+$/, 'Image must be a root-relative public asset path.')
+    .optional()
 });
 
 export const postSchema = postFields.superRefine((post, context) => {
@@ -35,6 +39,14 @@ export const postSchema = postFields.superRefine((post, context) => {
       code: 'custom',
       path: ['testedVersions'],
       message: 'Published labs require at least one tested version.'
+    });
+  }
+
+  if (post.updatedDate && post.updatedDate < post.publishedDate) {
+    context.addIssue({
+      code: 'custom',
+      path: ['updatedDate'],
+      message: 'Updated date cannot be earlier than published date.'
     });
   }
 });

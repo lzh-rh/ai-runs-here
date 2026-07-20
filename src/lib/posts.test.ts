@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPathNeighbors, isPublished, sortNewest } from './posts';
+import { getPathNeighbors, isPublished, sortNewest, validateLearningPathOrders } from './posts';
 
 const post = (id: string, overrides: Record<string, unknown> = {}) => ({
   id,
@@ -37,5 +37,21 @@ describe('post queries', () => {
     const second = post('second', { learningPath: { id: 'mcp', order: 2 } });
     const third = post('third', { learningPath: { id: 'mcp', order: 3 } });
     expect(getPathNeighbors([third, first, second], 'second')).toEqual({ previous: first, next: third });
+  });
+
+  it('rejects duplicate order values within one learning path', () => {
+    const first = post('first', { learningPath: { id: 'mcp', order: 1 } });
+    const duplicate = post('duplicate', { learningPath: { id: 'mcp', order: 1 } });
+
+    expect(() => validateLearningPathOrders([first, duplicate])).toThrow(
+      'Learning path "mcp" has duplicate order 1 in posts "first" and "duplicate".'
+    );
+  });
+
+  it('allows the same order in different learning paths', () => {
+    const mcp = post('mcp-post', { learningPath: { id: 'mcp', order: 1 } });
+    const agentic = post('agentic-post', { learningPath: { id: 'agentic-ai', order: 1 } });
+
+    expect(validateLearningPathOrders([mcp, agentic])).toEqual([mcp, agentic]);
   });
 });

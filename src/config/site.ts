@@ -24,6 +24,28 @@ export const learningPathConfig = {
   mcp: { label: 'MCP', description: 'Connect tools, servers, and gateways.' }
 } as const;
 
+export function resolveButtondownUsername(
+  value: string | undefined,
+  { production }: { production: boolean }
+) {
+  const username = value?.trim() ?? '';
+
+  if (!username) {
+    if (production) {
+      throw new Error(
+        'PUBLIC_BUTTONDOWN_USERNAME is required for production builds. Set it to the public Buttondown username.'
+      );
+    }
+    return '';
+  }
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/.test(username)) {
+    throw new Error('PUBLIC_BUTTONDOWN_USERNAME must be a valid Buttondown username slug.');
+  }
+
+  return username;
+}
+
 export function getPublicIntegrationConfig(env: Record<string, string | undefined>) {
   return {
     siteUrl: env.PUBLIC_SITE_URL ?? 'http://localhost:4321',

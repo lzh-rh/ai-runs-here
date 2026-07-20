@@ -20,6 +20,26 @@ export function getFeaturedPost(posts: Post[]) {
   return sortedPosts.find((post) => post.data.featured) ?? sortedPosts[0];
 }
 
+export function validateLearningPathOrders(posts: Post[]) {
+  const occupiedOrders = new Map<string, string>();
+
+  for (const post of posts) {
+    const learningPath = post.data.learningPath;
+    if (!learningPath) continue;
+
+    const key = `${learningPath.id}:${learningPath.order}`;
+    const previousId = occupiedOrders.get(key);
+    if (previousId) {
+      throw new Error(
+        `Learning path "${learningPath.id}" has duplicate order ${learningPath.order} in posts "${previousId}" and "${post.id}".`
+      );
+    }
+    occupiedOrders.set(key, post.id);
+  }
+
+  return posts;
+}
+
 export function getLearningPathGroups(posts: Post[]) {
   return posts.filter((post) => post.data.learningPath).reduce((groups, post) => {
     const id = post.data.learningPath!.id as LearningPathId;

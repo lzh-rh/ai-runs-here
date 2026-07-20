@@ -59,9 +59,17 @@ const labelDifficulty = (difficulty: string) =>
     const emptyState = root.querySelector('[data-search-empty]');
 
     if (form && input && topic && difficulty && summary && resultsRegion && resultList && emptyState) {
-      const initialTopic = new URLSearchParams(window.location.search).get('topic');
+      const initialParams = new URLSearchParams(window.location.search);
+      const initialTopic = initialParams.get('topic');
       if (initialTopic && [...topic.options].some((option) => option.value === initialTopic)) {
         topic.value = initialTopic;
+      }
+      const initialDifficulty = initialParams.get('difficulty');
+      if (
+        initialDifficulty &&
+        [...difficulty.options].some((option) => option.value === initialDifficulty)
+      ) {
+        difficulty.value = initialDifficulty;
       }
 
       let pagefindPromise;
@@ -115,7 +123,7 @@ const labelDifficulty = (difficulty: string) =>
           if (topic.value) filters.topic = topic.value;
           if (difficulty.value) filters.difficulty = difficulty.value;
 
-          const response = await pagefind.search(query, { filters });
+          const response = await pagefind.search(query || null, { filters });
           const results = await Promise.all(response.results.map((result) => result.data()));
           if (currentRequest === requestNumber) renderResults(results);
         } catch (error) {
