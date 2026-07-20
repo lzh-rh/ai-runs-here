@@ -1,0 +1,51 @@
+---
+title: Connect an MCP server to OpenShift Lightspeed
+description: Follow a version-aware workflow from prerequisites through a verified OpenShift Lightspeed query.
+publishedDate: 2026-07-20
+topic: mcp
+tags: [lightspeed, mcp-server, troubleshooting]
+difficulty: intermediate
+estimatedMinutes: 20
+testedVersions: [OpenShift Container Platform 4.20]
+prerequisites: [Access to an OpenShift cluster, The oc CLI, Permission to inspect the target namespace]
+draft: false
+featured: true
+learningPath:
+  id: mcp
+  order: 1
+---
+
+## What you will learn
+
+This lab shows the shape of a trustworthy MCP-to-Lightspeed workflow: check the environment, connect the service, issue a query, and preserve evidence of what worked.
+
+> This sample demonstrates the blog format. Replace its illustrative commands with commands verified against the exact lab environment before presenting it as a production procedure.
+
+## Prerequisites
+
+Confirm that `oc whoami` returns the expected user and that you are working in the intended cluster context.
+
+```bash
+oc whoami
+oc project
+```
+
+## Inspect the workload
+
+List the workloads in the namespace used by your experiment.
+
+```bash
+oc get pods -n redhat-ods-applications
+```
+
+## Verify the result
+
+Record the command output, cluster version, operator versions, and the time of the test. A useful lab distinguishes observed results from expected results.
+
+## Troubleshooting
+
+If the query fails, check authentication, route reachability, service endpoints, and pod logs in that order. Preserve the first concrete error before changing the environment.
+
+## References
+
+- [OpenShift product documentation](https://docs.redhat.com/en/documentation/openshift_container_platform/)
