@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
 test('initial search state keeps the published article list visible', async ({ page }) => {
@@ -59,4 +60,31 @@ test.describe('without JavaScript', () => {
     await expect(page.getByText('Browse all articles below.')).toBeVisible();
     await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toBeVisible();
   });
+});
+
+test('core pages have no serious accessibility violations', async ({ page }) => {
+  for (const path of ['/', '/articles/', '/learning-paths/', '/about/']) {
+    await page.goto(path);
+    const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
+    expect(
+      result.violations.filter((item) => ['serious', 'critical'].includes(item.impact ?? ''))
+    ).toEqual([]);
+  }
+});
+
+test('keyboard users can reach main content and navigation', async ({ browserName, page }) => {
+  await page.goto('/');
+  await page.keyboard.press(browserName === 'webkit' ? 'Alt+Tab' : 'Tab');
+  await expect(page.getByRole('link', { name: 'Skip to content' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#main')).toBeFocused();
+});
+
+test('mobile page does not overflow horizontally', async ({ page }) => {
+  await page.goto('/articles/connect-mcp-server-to-lightspeed/');
+  const widths = await page.evaluate(() => ({
+    viewport: document.documentElement.clientWidth,
+    page: document.documentElement.scrollWidth
+  }));
+  expect(widths.page).toBeLessThanOrEqual(widths.viewport);
 });

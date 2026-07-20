@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">AI Runs Here — Applied AI on OpenShift</title>
+  <desc id="description">Tested labs, useful diagrams, and honest notes from the terminal.</desc>
+  <rect width="1200" height="630" fill="#F1F6F1" />
+  <rect x="32" y="32" width="1136" height="566" fill="#FFFFFF" stroke="#9DB4A6" stroke-width="2" />
+  <path d="M32 126H1168" stroke="#9DB4A6" stroke-width="2" />
+  <rect x="64" y="62" width="44" height="44" fill="#C9F36A" stroke="#143E33" stroke-width="2" />
+  <text x="86" y="90" fill="#143E33" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16" font-weight="700" text-anchor="middle">AI</text>
+  <text x="132" y="91" fill="#143E33" font-family="Arial Narrow, Arial, sans-serif" font-size="26" font-weight="700" letter-spacing="2">APPLIED AI ON OPENSHIFT</text>
+  <text x="64" y="265" fill="#143E33" font-family="Arial Narrow, Arial, sans-serif" font-size="104" font-weight="800" letter-spacing="-4">AI RUNS HERE</text>
+  <text x="68" y="335" fill="#143E33" font-family="Arial, sans-serif" font-size="28">Tested labs, useful diagrams, and honest notes</text>
+  <text x="68" y="375" fill="#143E33" font-family="Arial, sans-serif" font-size="28">from the terminal.</text>
+  <rect x="704" y="422" width="412" height="126" rx="5" fill="#143E33" stroke="#9DB4A6" stroke-width="2" />
+  <path d="M704 465H1116" stroke="#9DB4A6" stroke-width="2" />
+  <circle cx="733" cy="444" r="7" fill="#C9F36A" />
+  <text x="754" y="451" fill="#F1F6F1" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="18" font-weight="700">TERMINAL</text>
+  <text x="1078" y="451" fill="#C9F36A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="16" font-weight="700" text-anchor="end">FIELD NOTES</text>
+  <text x="732" y="508" fill="#C9F36A" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="20">&gt; practical</text>
+  <text x="902" y="508" fill="#E5EEE6" font-family="ui-monospace, SFMono-Regular, Consolas, monospace" font-size="20">approachable</text>
+  <path d="M64 548H650" stroke="#9DB4A6" stroke-width="2" />
+  <rect x="64" y="536" width="132" height="24" fill="#C9F36A" />
+</svg>
