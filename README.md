@@ -25,13 +25,15 @@ Start the local authoring server:
 npm run dev
 ```
 
+Local development uses `http://localhost:4321` when `PUBLIC_SITE_URL` is not set. Production builds do not use that fallback: `PUBLIC_SITE_URL` must be an absolute HTTP(S) origin such as `https://blog.example.com`, with no path, query, or fragment.
+
 Before publishing, run the same release gate used by the project:
 
 ```bash
 PUBLIC_BUTTONDOWN_USERNAME=test PUBLIC_SITE_URL=https://example.com npm run verify
 ```
 
-`npm run verify` runs the Vitest suite, Astro checks, the production build, Pagefind indexing, internal-link validation, and Playwright desktop/mobile tests. The values above are deliberately non-secret test values; use the real public values in Vercel.
+`npm run verify` runs the Vitest suite, Astro checks, the production build, Pagefind indexing, Vercel deployment-artifact validation, internal-link validation, and Playwright desktop/mobile tests. The build copies Pagefind into `.vercel/output/static/pagefind/` after the Astro adapter creates the Vercel artifact, then asserts `.vercel/output/static/pagefind/pagefind.js` exists. The values above are deliberately non-secret test values; use the real public values in Vercel.
 
 ## Post frontmatter
 
@@ -64,7 +66,7 @@ image: /images/example-social.svg
 ---
 ```
 
-Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`.
+Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`. An explanatory or editorial guide that reports no product test may use `testedVersions: []`; the tested-versions panel is then omitted. A product lab must remain a draft until its exact versions and results have been reviewed.
 
 ## Author workflows
 
@@ -77,7 +79,7 @@ Use exact product versions in `testedVersions`; do not replace them with an unve
 
 ### Preview
 
-Drafts are available during local development. Review the article route, the Articles page, and any selected learning path. Exercise commands in a safe environment and record the exact versions tested. Run `npm run verify` before requesting editorial or technical review.
+Drafts are available during local development on their article routes, the Articles page, the homepage, related-post results, and any selected learning path. Production builds exclude those routes and references. Exercise commands in a safe environment and record the exact versions tested. Run `npm run verify` before requesting editorial or technical review.
 
 ### Publish
 
@@ -132,10 +134,18 @@ A path appears only after it contains at least one published post. Use stable id
 
 1. Push this project to the public GitHub repository that will own the site.
 2. In Vercel, choose **Add New → Project**, import that repository, and select the production branch.
-3. Let Vercel detect Astro. Use `npm run build` as the build command and `dist` as the output directory if those fields are not detected automatically.
+3. Let Vercel detect Astro and use `npm run build` as the build command. The Astro Vercel adapter creates `.vercel/output`; the final build step adds the Pagefind files to its `static` directory. Leave Vercel's output-directory override unset when using the adapter artifact.
 4. Set the Node.js runtime to 22.
 5. Add `PUBLIC_SITE_URL` for Production with the final public origin, for example `https://blog.example.com`. Do not include a path. Add the real Buttondown and Giscus values described below.
 6. Deploy, then confirm canonical links, Open Graph URLs, RSS, and `sitemap-index.xml` use the final origin.
+
+To check the generated deployment artifact locally after a build, run:
+
+```bash
+npm run check:deployment-artifact
+```
+
+It fails unless `.vercel/output/static/pagefind/pagefind.js` exists. You can also confirm the required production URL guard by running `PUBLIC_BUTTONDOWN_USERNAME=test npm run build`; the command must fail with a `PUBLIC_SITE_URL is required` message.
 
 All current integration values are public identifiers, not secrets. If a future integration adds a secret, store it only in Vercel environment variables and never prefix it with `PUBLIC_`.
 

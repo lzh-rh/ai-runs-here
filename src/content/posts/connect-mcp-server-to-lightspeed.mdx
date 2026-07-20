@@ -1,15 +1,15 @@
 ---
 title: Connect an MCP server to OpenShift Lightspeed
-description: Follow a version-aware workflow from prerequisites through a verified OpenShift Lightspeed query.
+description: An illustrative outline for planning an MCP-to-Lightspeed lab before its commands, query, and environment are verified.
 publishedDate: 2026-07-20
 topic: mcp
 tags: [lightspeed, mcp-server, troubleshooting]
 difficulty: intermediate
 estimatedMinutes: 20
-testedVersions: [OpenShift Container Platform 4.20]
+testedVersions: []
 prerequisites: [Access to an OpenShift cluster, The oc CLI, Permission to inspect the target namespace]
-draft: false
-featured: true
+draft: true
+featured: false
 learningPath:
   id: mcp
   order: 1
@@ -17,9 +17,9 @@ learningPath:
 
 ## What you will learn
 
-This lab shows the shape of a trustworthy MCP-to-Lightspeed workflow: check the environment, connect the service, issue a query, and preserve evidence of what worked.
+This draft outlines how a future MCP-to-Lightspeed lab could be recorded. It has not been run in a lab environment.
 
-> This sample demonstrates the blog format. Replace its illustrative commands with commands verified against the exact lab environment before presenting it as a production procedure.
+> This draft does not connect an MCP server or perform a Lightspeed query. Its commands are preliminary environment checks, not a verified procedure.
 
 ## Prerequisites
 
@@ -38,13 +38,13 @@ List the workloads in the namespace used by your experiment.
 oc get pods -n redhat-ods-applications
 ```
 
-## Verify the result
+## What remains to be tested
 
-Record the command output, cluster version, operator versions, and the time of the test. A useful lab distinguishes observed results from expected results.
+Before publication, this draft needs a real MCP connection, a Lightspeed query, captured output, and the exact product and platform versions from that run.
 
 ## Troubleshooting
 
-If the query fails, check authentication, route reachability, service endpoints, and pod logs in that order. Preserve the first concrete error before changing the environment.
+When the lab is run, preserve the first concrete error before changing the environment. Add troubleshooting steps only after they are exercised against that evidence.
 
 ## References
 

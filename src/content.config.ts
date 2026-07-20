@@ -14,7 +14,7 @@ export const postSchema = z.object({
   tags: z.array(z.string().min(1)).default([]),
   difficulty: z.enum(difficulties),
   estimatedMinutes: z.number().int().positive(),
-  testedVersions: z.array(z.string().min(3)).min(1),
+  testedVersions: z.array(z.string().min(3)),
   prerequisites: z.array(z.string().min(3)).default([]),
   draft: z.boolean().default(false),
   featured: z.boolean().default(false),

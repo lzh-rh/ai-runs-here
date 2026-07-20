@@ -1,6 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
+test.beforeEach(async ({ page }) => {
+  await page.route('https://giscus.app/**', (route) => route.abort());
+});
+
 test('initial search state keeps the published article list visible', async ({ page }) => {
   await page.goto('/articles/');
   await expect(page.getByText('Browse all articles below.')).toBeVisible();
@@ -10,7 +14,7 @@ test('initial search state keeps the published article list visible', async ({ p
 
 test('clearing every search control restores the published article list', async ({ page }) => {
   await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('Lightspeed');
+  await page.getByLabel('Search articles').fill('evidence');
   await expect(page.getByText('1 article found.')).toBeVisible();
 
   await page.getByLabel('Search articles').clear();
@@ -19,16 +23,16 @@ test('clearing every search control restores the published article list', async 
   await expect(page.locator('[data-search-results]')).toBeHidden();
 });
 
-test('search finds the MCP lab and filters by difficulty', async ({ page }) => {
+test('search finds the published reading guide and filters by difficulty', async ({ page }) => {
   await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('Lightspeed');
+  await page.getByLabel('Search articles').fill('evidence');
   await expect(page.getByText('1 article found.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
   await page.getByLabel('Difficulty').selectOption('advanced');
   await expect(page.getByText('Try another term or remove a filter.')).toBeVisible();
-  await page.getByLabel('Difficulty').selectOption('intermediate');
+  await page.getByLabel('Difficulty').selectOption('beginner');
   await expect(page.getByText('1 article found.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
 });
 
 test('empty result gives useful recovery guidance', async ({ page }) => {
@@ -38,8 +42,8 @@ test('empty result gives useful recovery guidance', async ({ page }) => {
 });
 
 test('topic query preselects the filter and filter changes update the URL', async ({ page }) => {
-  await page.goto('/articles/?topic=mcp');
-  await expect(page.getByLabel('Topic')).toHaveValue('mcp');
+  await page.goto('/articles/?topic=openshift-ai');
+  await expect(page.getByLabel('Topic')).toHaveValue('openshift-ai');
   await page.getByLabel('Topic').selectOption('lightspeed');
   await expect(page).toHaveURL(/topic=lightspeed/);
 });
@@ -47,9 +51,9 @@ test('topic query preselects the filter and filter changes update the URL', asyn
 test('static articles remain available when search cannot load', async ({ page }) => {
   await page.route('**/pagefind/pagefind.js', (route) => route.abort());
   await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('Lightspeed');
+  await page.getByLabel('Search articles').fill('evidence');
   await expect(page.getByText('Search is unavailable; browse all articles below.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
 });
 
 test.describe('without JavaScript', () => {
@@ -58,12 +62,26 @@ test.describe('without JavaScript', () => {
   test('offers the published article list directly', async ({ page }) => {
     await page.goto('/articles/');
     await expect(page.getByText('Browse all articles below.')).toBeVisible();
-    await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
   });
 });
 
+test('shows a visible message when the comments script cannot load', async ({ page }) => {
+  await page.goto('/articles/start-learning-applied-ai-on-openshift/');
+  await expect(page.locator('[data-comments-fallback]')).toBeVisible();
+  await expect(page.locator('[data-comments-status]')).toHaveText(
+    'Comments are currently unavailable. The article remains available above.'
+  );
+});
+
 test('core pages have no serious accessibility violations', async ({ page }) => {
-  for (const path of ['/', '/articles/', '/learning-paths/', '/about/']) {
+  for (const path of [
+    '/',
+    '/articles/',
+    '/learning-paths/',
+    '/about/',
+    '/articles/start-learning-applied-ai-on-openshift/'
+  ]) {
     await page.goto(path);
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
     expect(
@@ -81,7 +99,7 @@ test('keyboard users can reach main content and navigation', async ({ browserNam
 });
 
 test('mobile page does not overflow horizontally', async ({ page }) => {
-  await page.goto('/articles/connect-mcp-server-to-lightspeed/');
+  await page.goto('/articles/start-learning-applied-ai-on-openshift/');
   const widths = await page.evaluate(() => ({
     viewport: document.documentElement.clientWidth,
     page: document.documentElement.scrollWidth

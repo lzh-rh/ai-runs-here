@@ -10,7 +10,11 @@ export default defineConfig({
     command: `npm run build && npm run preview -- --host 127.0.0.1 --port ${port}`,
     env: {
       PUBLIC_BUTTONDOWN_USERNAME: buttondownUsername,
-      PUBLIC_SITE_URL: publicSiteUrl
+      PUBLIC_SITE_URL: publicSiteUrl,
+      PUBLIC_GISCUS_REPO: process.env.PUBLIC_GISCUS_REPO ?? 'example/ai-runs-here',
+      PUBLIC_GISCUS_REPO_ID: process.env.PUBLIC_GISCUS_REPO_ID ?? 'test-repository-id',
+      PUBLIC_GISCUS_CATEGORY: process.env.PUBLIC_GISCUS_CATEGORY ?? 'Announcements',
+      PUBLIC_GISCUS_CATEGORY_ID: process.env.PUBLIC_GISCUS_CATEGORY_ID ?? 'test-category-id'
     },
     port,
     reuseExistingServer: false

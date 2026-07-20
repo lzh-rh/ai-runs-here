@@ -16,15 +16,18 @@ interface Props {
 
 const { post, headings, neighbors } = Astro.props;
 const tableOfContents = headings.filter(({ depth }) => depth === 2 || depth === 3);
+const mode = import.meta.env.PROD ? 'production' : 'development';
 const relatedPosts = sortNewest(
   (await getCollection('posts')).filter(
     (candidate) =>
-      isPublished(candidate, 'production') &&
+      isPublished(candidate, mode) &&
       candidate.id !== post.id &&
       candidate.data.topic === post.data.topic
   )
 ).slice(0, 3);
 const topic = topicConfig[post.data.topic];
+const showEnvironment = post.data.testedVersions.length > 0;
+const showPrerequisites = post.data.prerequisites.length > 0;
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
 ---
@@ -49,7 +52,7 @@ const formatDate = (date: Date) =>
           <p class="article-summary">{post.data.description}</p>
         </div>
         <aside class="article-register" aria-labelledby="article-register-title">
-          <h2 class="eyebrow" id="article-register-title">Lab register</h2>
+          <h2 class="eyebrow" id="article-register-title">Field note register</h2>
           <dl>
             <div>
               <dt>Topic</dt>
@@ -77,24 +80,28 @@ const formatDate = (date: Date) =>
         </aside>
       </header>
 
-      <div class:list={['article-setup', { 'article-setup--single': post.data.prerequisites.length === 0 }]}>
-        <section class="setup-panel" aria-labelledby="tested-versions-title">
-          <p class="eyebrow">Environment</p>
-          <h2 id="tested-versions-title">Tested versions</h2>
-          <ul>
-            {post.data.testedVersions.map((version) => <li>{version}</li>)}
-          </ul>
-        </section>
-        {post.data.prerequisites.length > 0 && (
-          <section class="setup-panel" aria-labelledby="prerequisites-title">
-            <p class="eyebrow">Before you begin</p>
-            <h2 id="prerequisites-title">Prerequisites</h2>
-            <ul>
-              {post.data.prerequisites.map((prerequisite) => <li>{prerequisite}</li>)}
-            </ul>
-          </section>
-        )}
-      </div>
+      {(showEnvironment || showPrerequisites) && (
+        <div class:list={['article-setup', { 'article-setup--single': showEnvironment !== showPrerequisites }]}>
+          {showEnvironment && (
+            <section class="setup-panel" aria-labelledby="tested-versions-title">
+              <p class="eyebrow">Environment</p>
+              <h2 id="tested-versions-title">Tested versions</h2>
+              <ul>
+                {post.data.testedVersions.map((version) => <li>{version}</li>)}
+              </ul>
+            </section>
+          )}
+          {showPrerequisites && (
+            <section class="setup-panel" aria-labelledby="prerequisites-title">
+              <p class="eyebrow">Before you begin</p>
+              <h2 id="prerequisites-title">Prerequisites</h2>
+              <ul>
+                {post.data.prerequisites.map((prerequisite) => <li>{prerequisite}</li>)}
+              </ul>
+            </section>
+          )}
+        </div>
+      )}
 
       <div class:list={['article-reading-grid', { 'article-reading-grid--without-toc': tableOfContents.length === 0 }]}>
         {tableOfContents.length > 0 && (

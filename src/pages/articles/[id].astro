@@ -5,8 +5,9 @@ import { getPathNeighbors, isPublished, type Post } from '../../lib/posts';
 
 export async function getStaticPaths() {
   const all = await getCollection('posts');
-  const published = all.filter((post) => isPublished(post, 'production'));
-  return published.map((post) => ({ params: { id: post.id }, props: { post, all: published } }));
+  const mode = import.meta.env.PROD ? 'production' : 'development';
+  const visible = all.filter((post) => isPublished(post, mode));
+  return visible.map((post) => ({ params: { id: post.id }, props: { post, all: visible } }));
 }
 
 const { post, all } = Astro.props as { post: Post; all: Post[] };

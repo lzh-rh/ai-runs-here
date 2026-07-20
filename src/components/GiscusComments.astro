@@ -15,8 +15,12 @@ const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.category
   {configured ? (
     <>
       <p class="visually-hidden" data-comments-status aria-live="polite">Loading comments.</p>
+      <p class="comments__fallback" data-comments-fallback hidden>
+        Comments are currently unavailable. The article remains available above.
+      </p>
       <script
         is:inline
+        data-giscus-script
         src="https://giscus.app/client.js"
         data-repo={giscus.repo}
         data-repo-id={giscus.repoId}
@@ -30,6 +34,7 @@ const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.category
         data-theme="light"
         data-lang="en"
         crossorigin="anonymous"
+        onerror="this.closest('[data-giscus-comments]').querySelector('[data-comments-fallback]').hidden=false;this.closest('[data-giscus-comments]').querySelector('[data-comments-status]').textContent='Comments are currently unavailable. The article remains available above.'"
         async
       ></script>
     </>
@@ -41,13 +46,24 @@ const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.category
 </section>
 
 {configured && (
-  <script>
+  <script is:inline>
     document.querySelectorAll('[data-giscus-comments][data-configured="true"]').forEach((comments) => {
       const status = comments.querySelector('[data-comments-status]');
+      const fallback = comments.querySelector('[data-comments-fallback]');
+      const script = comments.querySelector('[data-giscus-script]');
       let frameLoaded = false;
-      let timeoutId: number | undefined;
+      let timeoutId;
 
-      const watchFrame = (frame: Element) => {
+      const unavailable = () => {
+        if (frameLoaded) return;
+        if (status) {
+          status.textContent = 'Comments are currently unavailable. The article remains available above.';
+        }
+        if (fallback) fallback.hidden = false;
+        observer.disconnect();
+      };
+
+      const watchFrame = (frame) => {
         frame.addEventListener('load', () => {
           frameLoaded = true;
           if (timeoutId !== undefined) window.clearTimeout(timeoutId);
@@ -64,12 +80,10 @@ const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.category
       observer.observe(comments, { childList: true, subtree: true });
       const existingFrame = comments.querySelector('iframe.giscus-frame');
       if (existingFrame) watchFrame(existingFrame);
+      if (script) script.addEventListener('error', unavailable, { once: true });
 
       timeoutId = window.setTimeout(() => {
-        if (!frameLoaded && status) {
-          status.textContent = 'Comments are currently unavailable. The article remains available above.';
-        }
-        observer.disconnect();
+        unavailable();
       }, 8_000);
     });
   </script>
@@ -100,6 +114,7 @@ const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.category
     max-width: 42rem;
     margin: 0;
     color: var(--ink-muted);
+    font-size: 0.9rem;
   }
 
   .visually-hidden {

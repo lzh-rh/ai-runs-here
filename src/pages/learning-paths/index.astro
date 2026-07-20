@@ -6,8 +6,9 @@ import { getLearningPathGroups, isPublished } from '../../lib/posts';
 
 type LearningPathId = keyof typeof learningPathConfig;
 
-const published = (await getCollection('posts')).filter((post) => isPublished(post, 'production'));
-const groups = getLearningPathGroups(published);
+const mode = import.meta.env.PROD ? 'production' : 'development';
+const posts = (await getCollection('posts')).filter((post) => isPublished(post, mode));
+const groups = getLearningPathGroups(posts);
 const paths = (Object.keys(learningPathConfig) as LearningPathId[])
   .map((id) => ({
     id,
@@ -27,7 +28,7 @@ const paths = (Object.keys(learningPathConfig) as LearningPathId[])
     <header class="paths-hero">
       <p class="eyebrow">Guided routes through the workbench</p>
       <h1 class="display">Learning paths</h1>
-      <p>Move through related field notes in a tested order, from the first useful concept to a working connection.</p>
+      <p>Move through related published field notes in a deliberate order, from useful context to deeper hands-on notes.</p>
     </header>
 
     <div class="paths-list">

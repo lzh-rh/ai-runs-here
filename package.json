@@ -7,14 +7,15 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro check && astro build && pagefind --site dist",
+    "build": "astro check && astro build && pagefind --site dist && node scripts/sync-pagefind-to-vercel.mjs",
     "preview": "astro preview",
     "check": "astro check",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "check:links": "node scripts/check-links.mjs",
-    "verify": "npm run test && npm run build && npm run check:links && npm run test:e2e"
+    "check:deployment-artifact": "node scripts/sync-pagefind-to-vercel.mjs --check",
+    "verify": "npm run test && npm run build && npm run check:deployment-artifact && npm run check:links && npm run test:e2e"
   },
   "dependencies": {
     "@astrojs/check": "^0.9.9",

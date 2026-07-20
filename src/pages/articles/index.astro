@@ -5,8 +5,9 @@ import SearchPanel from '../../components/SearchPanel.astro';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { isPublished, sortNewest } from '../../lib/posts';
 
+const mode = import.meta.env.PROD ? 'production' : 'development';
 const posts = sortNewest(
-  (await getCollection('posts')).filter((post) => isPublished(post, 'production'))
+  (await getCollection('posts')).filter((post) => isPublished(post, mode))
 );
 ---
 

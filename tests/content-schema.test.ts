@@ -21,10 +21,14 @@ describe('postSchema', () => {
     expect(postSchema.safeParse(validPost).success).toBe(true);
   });
 
+  it('accepts a non-lab guide without fabricated tested versions', () => {
+    expect(postSchema.safeParse({ ...validPost, testedVersions: [] }).success).toBe(true);
+  });
+
   it.each([
     [{ ...validPost, estimatedMinutes: 0 }, 'non-positive duration'],
     [{ ...validPost, difficulty: 'easy' }, 'uncontrolled difficulty'],
-    [{ ...validPost, testedVersions: [] }, 'missing tested version']
+    [{ ...validPost, testedVersions: [''] }, 'blank tested version']
   ])('rejects %s', (input) => {
     expect(postSchema.safeParse(input).success).toBe(false);
   });
