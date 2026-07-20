@@ -59,15 +59,27 @@ const labelDifficulty = (difficulty: string) =>
     const emptyState = root.querySelector('[data-search-empty]');
 
     if (form && input && topic && difficulty && summary && resultsRegion && resultList && emptyState) {
-      summary.textContent = 'Loading article search…';
       const initialTopic = new URLSearchParams(window.location.search).get('topic');
       if (initialTopic && [...topic.options].some((option) => option.value === initialTopic)) {
         topic.value = initialTopic;
       }
 
-      const pagefindPromise = import('/pagefind/pagefind.js');
+      let pagefindPromise;
       let debounceTimer = 0;
       let requestNumber = 0;
+
+      const loadPagefind = () => {
+        pagefindPromise ??= import('/pagefind/pagefind.js');
+        return pagefindPromise;
+      };
+
+      const showPublishedArticles = () => {
+        staticArticles.hidden = false;
+        resultsRegion.hidden = true;
+        emptyState.hidden = true;
+        resultList.replaceChildren();
+        summary.textContent = 'Browse all articles below.';
+      };
 
       const showFallback = () => {
         staticArticles.hidden = false;
@@ -95,22 +107,9 @@ const labelDifficulty = (difficulty: string) =>
         resultsRegion.hidden = false;
       };
 
-      const matchesEverySearchTerm = (result, query) => {
-        const terms = query.toLocaleLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
-        if (terms.length === 0) return true;
-
-        const haystack = [result.content, ...Object.values(result.meta)]
-          .filter(Boolean)
-          .join(' ')
-          .toLocaleLowerCase();
-        return terms.every((term) => haystack.includes(term));
-      };
-
-      const runSearch = async () => {
-        const currentRequest = ++requestNumber;
-
+      const runSearch = async (currentRequest) => {
         try {
-          const pagefind = await pagefindPromise;
+          const pagefind = await loadPagefind();
           const query = input.value.trim();
           const filters = {};
           if (topic.value) filters.topic = topic.value;
@@ -118,8 +117,7 @@ const labelDifficulty = (difficulty: string) =>
 
           const response = await pagefind.search(query, { filters });
           const results = await Promise.all(response.results.map((result) => result.data()));
-          const matchingResults = results.filter((result) => matchesEverySearchTerm(result, query));
-          if (currentRequest === requestNumber) renderResults(matchingResults);
+          if (currentRequest === requestNumber) renderResults(results);
         } catch (error) {
           console.error('Article search is unavailable.', error);
           if (currentRequest === requestNumber) showFallback();
@@ -128,7 +126,14 @@ const labelDifficulty = (difficulty: string) =>
 
       const scheduleSearch = () => {
         window.clearTimeout(debounceTimer);
-        debounceTimer = window.setTimeout(() => void runSearch(), 150);
+        const currentRequest = ++requestNumber;
+
+        if (!input.value.trim() && !topic.value && !difficulty.value) {
+          showPublishedArticles();
+          return;
+        }
+
+        debounceTimer = window.setTimeout(() => void runSearch(currentRequest), 150);
       };
 
       const updateFilterQuery = () => {
