@@ -1,6 +1,7 @@
 ---
 import { getCollection } from 'astro:content';
 import BaseLayout from '../layouts/BaseLayout.astro';
+import NewsletterForm from '../components/NewsletterForm.astro';
 import PostCard from '../components/PostCard.astro';
 import TerminalStatus from '../components/TerminalStatus.astro';
 import TopicRail from '../components/TopicRail.astro';
@@ -52,6 +53,6 @@ const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?
       )}
     </section>
 
-    <!-- Newsletter subscription is added when the Task 6 integration is configured. -->
+    <NewsletterForm />
   </div>
 </BaseLayout>
