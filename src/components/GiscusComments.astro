@@ -1,0 +1,115 @@
+---
+import { getPublicIntegrationConfig } from '../config/site';
+
+const { giscus } = getPublicIntegrationConfig(import.meta.env);
+const configured = [giscus.repo, giscus.repoId, giscus.category, giscus.categoryId].every(
+  (identifier) => identifier.trim().length > 0
+);
+---
+
+<section class="comments" data-giscus-comments data-configured={configured ? 'true' : 'false'} aria-labelledby="comments-title">
+  <div class="comments__heading">
+    <p class="eyebrow">Continue the field note</p>
+    <h2 id="comments-title">Comments</h2>
+  </div>
+  {configured ? (
+    <>
+      <p class="visually-hidden" data-comments-status aria-live="polite">Loading comments.</p>
+      <script
+        is:inline
+        src="https://giscus.app/client.js"
+        data-repo={giscus.repo}
+        data-repo-id={giscus.repoId}
+        data-category={giscus.category}
+        data-category-id={giscus.categoryId}
+        data-mapping="pathname"
+        data-strict="1"
+        data-reactions-enabled="1"
+        data-emit-metadata="0"
+        data-input-position="top"
+        data-theme="light"
+        data-lang="en"
+        crossorigin="anonymous"
+        async
+      ></script>
+    </>
+  ) : (
+    <p class="comments__fallback">
+      Comments will be available after the public GitHub Discussions repository is connected.
+    </p>
+  )}
+</section>
+
+{configured && (
+  <script>
+    document.querySelectorAll('[data-giscus-comments][data-configured="true"]').forEach((comments) => {
+      const status = comments.querySelector('[data-comments-status]');
+      let frameLoaded = false;
+      let timeoutId: number | undefined;
+
+      const watchFrame = (frame: Element) => {
+        frame.addEventListener('load', () => {
+          frameLoaded = true;
+          if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+          observer.disconnect();
+          if (status) status.textContent = 'Comments loaded.';
+        }, { once: true });
+      };
+
+      const observer = new MutationObserver(() => {
+        const frame = comments.querySelector('iframe.giscus-frame');
+        if (frame) watchFrame(frame);
+      });
+
+      observer.observe(comments, { childList: true, subtree: true });
+      const existingFrame = comments.querySelector('iframe.giscus-frame');
+      if (existingFrame) watchFrame(existingFrame);
+
+      timeoutId = window.setTimeout(() => {
+        if (!frameLoaded && status) {
+          status.textContent = 'Comments are currently unavailable. The article remains available above.';
+        }
+        observer.disconnect();
+      }, 8_000);
+    });
+  </script>
+)}
+
+<style>
+  .comments {
+    margin-top: clamp(3.5rem, 8vw, 6rem);
+    padding: clamp(1.25rem, 4vw, 2.5rem);
+    border: 1px solid var(--rule);
+    background: var(--white);
+  }
+
+  .comments__heading {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .comments__heading h2 {
+    margin: 0.45rem 0 0;
+    font: 800 clamp(1.8rem, 4vw, 2.8rem) / 1 var(--font-display);
+    letter-spacing: -0.025em;
+    text-transform: uppercase;
+  }
+
+  .comments__fallback {
+    max-width: 42rem;
+    margin: 0;
+    color: var(--ink-muted);
+  }
+
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>

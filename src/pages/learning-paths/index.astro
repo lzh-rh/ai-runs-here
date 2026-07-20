@@ -1,0 +1,230 @@
+---
+import { getCollection } from 'astro:content';
+import { learningPathConfig } from '../../config/site';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getLearningPathGroups, isPublished } from '../../lib/posts';
+
+type LearningPathId = keyof typeof learningPathConfig;
+
+const published = (await getCollection('posts')).filter((post) => isPublished(post, 'production'));
+const groups = getLearningPathGroups(published);
+const paths = (Object.keys(learningPathConfig) as LearningPathId[])
+  .map((id) => ({
+    id,
+    ...learningPathConfig[id],
+    posts: [...(groups.get(id) ?? [])].sort(
+      (a, b) => a.data.learningPath!.order - b.data.learningPath!.order
+    )
+  }))
+  .filter(({ posts }) => posts.length > 0);
+---
+
+<BaseLayout
+  title="Learning paths"
+  description="Follow ordered, hands-on routes through Applied AI on OpenShift."
+>
+  <div class="shell paths-shell">
+    <header class="paths-hero">
+      <p class="eyebrow">Guided routes through the workbench</p>
+      <h1 class="display">Learning paths</h1>
+      <p>Move through related field notes in a tested order, from the first useful concept to a working connection.</p>
+    </header>
+
+    <div class="paths-list">
+      {paths.map((path) => (
+        <section class="path-group" aria-labelledby={`path-${path.id}`}>
+          <header class="path-group__heading">
+            <div>
+              <p class="eyebrow">{path.posts.length} {path.posts.length === 1 ? 'field note' : 'field notes'}</p>
+              <h2 id={`path-${path.id}`}>{path.label}</h2>
+            </div>
+            <p>{path.description}</p>
+          </header>
+          <ol class="path-steps">
+            {path.posts.map((post, index) => (
+              <li>
+                <span class="path-steps__number" aria-hidden="true">{String(index + 1).padStart(2, '0')}</span>
+                <div class="path-steps__body">
+                  <p class="path-steps__meta">{post.data.difficulty} · {post.data.estimatedMinutes} minutes</p>
+                  <h3><a href={`/articles/${post.id}/`}>{post.data.title}</a></h3>
+                  <p>{post.data.description}</p>
+                </div>
+                <span class="path-steps__arrow" aria-hidden="true">→</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      ))}
+    </div>
+  </div>
+</BaseLayout>
+
+<style>
+  .paths-shell {
+    border-right: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+  }
+
+  .paths-hero {
+    padding: clamp(3.5rem, 9vw, 7rem) clamp(1.25rem, 5vw, 4rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .paths-hero .display {
+    margin-block: 1rem 1.5rem;
+  }
+
+  .paths-hero > p:last-child {
+    max-width: 42rem;
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: clamp(1.05rem, 2vw, 1.3rem);
+  }
+
+  .paths-list {
+    display: grid;
+  }
+
+  .path-group {
+    padding: clamp(2.5rem, 7vw, 5rem) clamp(1rem, 4vw, 2.5rem);
+    border-bottom: 1px solid var(--rule);
+  }
+
+  .path-group:last-child {
+    border-bottom: 0;
+  }
+
+  .path-group__heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 0.45fr);
+    align-items: end;
+    gap: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .path-group__heading h2 {
+    max-width: 14ch;
+    margin: 0.6rem 0 0;
+    font: 800 clamp(2.5rem, 6vw, 5rem) / 0.9 var(--font-display);
+    letter-spacing: -0.04em;
+    text-transform: uppercase;
+  }
+
+  .path-group__heading > p {
+    margin: 0;
+    color: var(--ink-muted);
+  }
+
+  .path-steps {
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--rule);
+    list-style: none;
+  }
+
+  .path-steps li {
+    position: relative;
+    display: grid;
+    grid-template-columns: 4rem minmax(0, 1fr) auto;
+    gap: clamp(1rem, 3vw, 2rem);
+    min-height: 12rem;
+    padding: clamp(1.25rem, 3vw, 2rem);
+    border-right: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    border-left: 1px solid var(--rule);
+    background: var(--white);
+  }
+
+  .path-steps__number {
+    color: var(--ink-muted);
+    font: 700 0.72rem/1 var(--font-mono);
+  }
+
+  .path-steps__body {
+    align-self: center;
+  }
+
+  .path-steps__meta {
+    margin: 0 0 0.65rem;
+    color: var(--ink-muted);
+    font: 700 0.67rem/1 var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .path-steps h3 {
+    margin: 0;
+    font: 800 clamp(1.65rem, 4vw, 2.75rem) / 1 var(--font-display);
+    text-transform: uppercase;
+  }
+
+  .path-steps h3 a {
+    text-decoration: none;
+  }
+
+  .path-steps h3 a::after {
+    position: absolute;
+    inset: 0;
+    content: "";
+  }
+
+  .path-steps__body > p:last-child {
+    max-width: 44rem;
+    margin: 0.8rem 0 0;
+    color: var(--ink-muted);
+  }
+
+  .path-steps__arrow {
+    align-self: center;
+    font: 800 1.2rem/1 var(--font-mono);
+  }
+
+  .path-steps li:has(a:focus-visible) {
+    outline: 3px solid var(--signal);
+    outline-offset: 4px;
+  }
+
+  .path-steps a:focus-visible {
+    outline: 0;
+  }
+
+  .path-steps li:hover {
+    background: var(--signal);
+  }
+
+  @media (max-width: 48rem) {
+    .paths-shell {
+      border-right: 0;
+      border-left: 0;
+    }
+
+    .path-group__heading {
+      grid-template-columns: 1fr;
+      align-items: start;
+      gap: 1rem;
+    }
+
+    .path-steps li {
+      grid-template-columns: 2rem minmax(0, 1fr) auto;
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .path-steps li {
+      grid-template-columns: 1fr auto;
+    }
+
+    .path-steps__number {
+      grid-column: 1;
+    }
+
+    .path-steps__body {
+      grid-column: 1 / -1;
+    }
+
+    .path-steps__arrow {
+      grid-row: 1;
+      grid-column: 2;
+    }
+  }
+</style>

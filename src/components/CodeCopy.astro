@@ -1,0 +1,58 @@
+<script>
+  document.querySelectorAll('pre > code').forEach((code) => {
+    const pre = code.parentElement;
+    if (!pre || pre.dataset.codeCopyEnhanced === 'true') return;
+
+    pre.dataset.codeCopyEnhanced = 'true';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'code-copy-button';
+    button.textContent = 'Copy code';
+    button.setAttribute('aria-live', 'polite');
+
+    button.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code.textContent ?? '');
+        button.textContent = 'Copied';
+        setTimeout(() => {
+          button.textContent = 'Copy code';
+        }, 1_500);
+      } catch {
+        button.textContent = 'Copy failed';
+      }
+    });
+
+    pre.insertBefore(button, code);
+  });
+</script>
+
+<style is:global>
+  .article-prose pre:has(> code) {
+    position: relative;
+    padding-top: 3.4rem;
+    border: 1px solid var(--cluster);
+    border-radius: 0.3rem;
+    box-shadow: 0.45rem 0.45rem 0 var(--rule);
+  }
+
+  .code-copy-button {
+    position: absolute;
+    top: 0.65rem;
+    right: 0.65rem;
+    min-height: 2rem;
+    padding: 0.35rem 0.65rem;
+    border: 1px solid color-mix(in srgb, var(--signal) 62%, transparent);
+    border-radius: 0.2rem;
+    color: var(--signal);
+    background: var(--cluster);
+    font: 800 0.66rem/1 var(--font-mono);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .code-copy-button:hover {
+    color: var(--cluster);
+    background: var(--signal);
+  }
+</style>
