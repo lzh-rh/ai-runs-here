@@ -1,0 +1,19 @@
+---
+import { siteConfig } from '../config/site';
+---
+
+<footer class="site-footer">
+  <div class="site-footer__inner shell">
+    <div>
+      <p class="site-footer__title">{siteConfig.title}</p>
+      <p class="site-footer__disclaimer">
+        AI Runs Here is a personal learning publication and is not an official Red Hat website.
+      </p>
+    </div>
+    <nav aria-label="Footer navigation">
+      <ul class="site-footer__links">
+        {siteConfig.navigation.map((item) => <li><a href={item.href}>{item.label}</a></li>)}
+      </ul>
+    </nav>
+  </div>
+</footer>

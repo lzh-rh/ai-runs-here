@@ -1,0 +1,60 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+---
+
+<BaseLayout
+  title="About"
+  description="How AI Runs Here turns hands-on Applied AI experiments into clear, evidence-aware field notes."
+>
+  <div class="shell">
+    <section class="about-hero" aria-labelledby="about-title">
+      <div class="about-hero__main">
+        <p class="eyebrow">About this lab notebook</p>
+        <h1 class="display" id="about-title">Learn by building. Explain by showing.</h1>
+      </div>
+      <aside class="about-hero__aside">
+        <p class="eyebrow">Editorial rule</p>
+        <p>Say what was tested, name the environment, preserve the useful failure, and mark what still needs verification.</p>
+      </aside>
+    </section>
+
+    <div class="section-block">
+      <div class="method-grid">
+        <section class="method-card">
+          <p class="eyebrow">Method</p>
+          <h2>Build before explaining</h2>
+          <p>
+            Each field note begins with a real question, a lab, or a troubleshooting session. The useful outcome is not
+            only the final command—it is the reasoning, evidence, and recovery path that make the result repeatable.
+          </p>
+        </section>
+        <section class="method-card">
+          <p class="eyebrow">Audience</p>
+          <h2>Meet readers where they are</h2>
+          <p>
+            AI Runs Here is for developers, platform engineers, technical sellers, customers, and curious beginners
+            learning how Applied AI fits into OpenShift. Concepts start in plain language and keep the technical detail
+            needed to try them.
+          </p>
+        </section>
+        <section class="method-card">
+          <p class="eyebrow">Corrections</p>
+          <h2>Accuracy is an ongoing practice</h2>
+          <p>
+            Product behavior and lab environments change. When a note needs correction, the goal is to update it
+            clearly, retain relevant version context, and distinguish a confirmed result from an expectation or an
+            experiment still in progress.
+          </p>
+        </section>
+        <section class="method-card">
+          <p class="eyebrow">Independence</p>
+          <h2>A personal learning publication</h2>
+          <p>
+            This site may discuss Red Hat products, including OpenShift, but it reflects a personal learning process. AI
+            Runs Here is not an official Red Hat website, and product documentation remains the source of record.
+          </p>
+        </section>
+      </div>
+    </div>
+  </div>
+</BaseLayout>

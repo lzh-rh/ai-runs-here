@@ -1,0 +1,57 @@
+---
+import { getCollection } from 'astro:content';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import PostCard from '../components/PostCard.astro';
+import TerminalStatus from '../components/TerminalStatus.astro';
+import TopicRail from '../components/TopicRail.astro';
+import { siteConfig } from '../config/site';
+import { getFeaturedPost, isPublished, sortNewest } from '../lib/posts';
+
+const mode = import.meta.env.PROD ? 'production' : 'development';
+const posts = (await getCollection('posts')).filter((post) => isPublished(post, mode));
+const featuredPost = getFeaturedPost(posts);
+const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?.id).slice(0, 4);
+---
+
+<BaseLayout>
+  <div class="shell">
+    <section class="hero" aria-labelledby="home-title">
+      <div class="hero__main">
+        <p class="eyebrow">Applied AI on OpenShift · Field notes 001–∞</p>
+        <h1 class="display hero__title" id="home-title">Applied AI, step by step.</h1>
+        <p class="hero__promise">{siteConfig.description}</p>
+      </div>
+      <aside class="hero__aside" aria-label="Current lab status">
+        <p class="eyebrow">Current bench note</p>
+        <TerminalStatus
+          label="MCP to Lightspeed"
+          lines={[
+            'Scope: connection workflow',
+            'Evidence: pending a live lab run',
+            'Next: record exact versions and output'
+          ]}
+          verified={false}
+        />
+      </aside>
+    </section>
+
+    <TopicRail />
+
+    <section class="section-block" aria-labelledby="field-notes-title">
+      <div class="section-heading">
+        <h2 id="field-notes-title">Field notes from the workbench</h2>
+        <p>Practical walkthroughs and explanations that separate observed results from the next thing to test.</p>
+      </div>
+      {featuredPost ? (
+        <div class="post-grid">
+          <PostCard post={featuredPost} featured />
+          {recentPosts.map((post) => <PostCard post={post} />)}
+        </div>
+      ) : (
+        <p>No published field notes yet. The first lab is still on the workbench.</p>
+      )}
+    </section>
+
+    <!-- Newsletter subscription is added when the Task 6 integration is configured. -->
+  </div>
+</BaseLayout>

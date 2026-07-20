@@ -1,0 +1,24 @@
+---
+import type { Post } from '../lib/posts';
+import { topicConfig } from '../config/site';
+
+interface Props {
+  post: Post;
+  featured?: boolean;
+}
+
+const { post, featured = false } = Astro.props;
+const topic = topicConfig[post.data.topic];
+const difficulty = post.data.difficulty.charAt(0).toUpperCase() + post.data.difficulty.slice(1);
+---
+
+<article class:list={['post-card', { 'post-card--featured': featured }]}>
+  <div class="post-card__meta">
+    <span class="post-card__topic">{topic.label}</span>
+    <span>{difficulty}</span>
+    <span>{post.data.estimatedMinutes} min</span>
+  </div>
+  <h3 class="post-card__title"><a href={`/articles/${post.id}/`}>{post.data.title}</a></h3>
+  <p class="post-card__description">{post.data.description}</p>
+  <span class="post-card__arrow" aria-hidden="true">↗</span>
+</article>
