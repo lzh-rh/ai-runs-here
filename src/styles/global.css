@@ -20,7 +20,6 @@ html {
   color: var(--cluster);
   background: var(--paper);
   font-family: var(--font-body);
-  scroll-behavior: smooth;
 }
 
 body {
@@ -531,6 +530,10 @@ textarea {
 }
 
 @media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
   .post-card {
     transition: transform 160ms ease, box-shadow 160ms ease;
   }
@@ -542,10 +545,6 @@ textarea {
 }
 
 @media (max-width: 48rem) {
-  html {
-    scroll-behavior: auto;
-  }
-
   .shell {
     width: min(100% - 1rem, var(--content));
   }
