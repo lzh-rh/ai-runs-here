@@ -15,6 +15,6 @@ const { post } = Astro.props as { post: Post };
 const { Content, headings } = await render(post);
 ---
 
-<PostLayout post={post} headings={headings} neighbors={{}}>
+<PostLayout post={post} headings={headings}>
   <Content />
 </PostLayout>

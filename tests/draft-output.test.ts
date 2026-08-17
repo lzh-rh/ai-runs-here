@@ -22,7 +22,7 @@ describe('production publication boundary', () => {
 
     expect(feed).toContain("isPublished(post, 'production')");
     expect(feed).toMatch(/sortNewest\([\s\S]*getPostCollection\(\)[\s\S]*\.filter/);
-    expect(feed).toContain("link: `/articles/${post.id}/`");
+    expect(feed).toContain("link: withBase(`/articles/${post.id}/`)");
   });
 });
 

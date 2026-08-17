@@ -17,9 +17,15 @@ test('production excludes draft articles and draft-preview badges', async ({ pag
 test('home exposes exactly the three primary topic links', async ({ page }) => {
   await page.goto('/');
   const main = page.locator('main');
-  await expect(main.getByRole('link', { name: 'OpenShift Lightspeed' })).toBeVisible();
-  await expect(main.getByRole('link', { name: 'Agentic Lightspeed' })).toBeVisible();
-  await expect(main.getByRole('link', { name: 'MCP' })).toBeVisible();
+  for (const [name, href] of [
+    ['OpenShift Lightspeed', '/topics/openshift-lightspeed/'],
+    ['Agentic Lightspeed', '/topics/agentic-lightspeed/'],
+    ['MCP', '/topics/mcp/']
+  ] as const) {
+    const topicLink = main.getByRole('link', { name, exact: true });
+    await expect(topicLink).toHaveCount(1);
+    await expect(topicLink).toHaveAttribute('href', href);
+  }
   await expect(page.getByText('Learning paths')).toHaveCount(0);
   await expect(page.getByText(/newsletter/i)).toHaveCount(0);
 });
@@ -61,84 +67,47 @@ test('mobile navigation reports and closes its expanded state', async ({ page })
   await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   await page.keyboard.press('Escape');
   await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+
+  await menuButton.click();
+  const articlesLink = page.getByRole('link', { name: 'Articles / Search', exact: true });
+  await articlesLink.evaluate((link) => {
+    link.addEventListener('click', (event) => event.preventDefault(), { once: true });
+  });
+  await articlesLink.click();
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
 });
 
-test('clearing every search control restores the published article list', async ({ page }) => {
+test('articles page exposes one search input and no advanced filters', async ({ page }) => {
   await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('evidence');
-  await expect(page.getByText('1 article found.')).toBeVisible();
+  await expect(page.getByRole('searchbox', { name: 'Search articles' })).toBeVisible();
+  await expect(page.getByLabel('Topic')).toHaveCount(0);
+  await expect(page.getByLabel('Difficulty')).toHaveCount(0);
+});
 
-  await page.getByLabel('Search articles').clear();
+test('search returns article metadata and can be cleared', async ({ page }) => {
+  await page.goto('/articles/');
+  await page.getByRole('searchbox', { name: 'Search articles' }).fill('evidence');
+  await expect(page.getByText('1 article found.')).toBeVisible();
+  await expect(page.locator('[data-search-results]').getByText('OpenShift Lightspeed')).toBeVisible();
+
+  await page.getByRole('searchbox', { name: 'Search articles' }).clear();
   await expect(page.getByText('Browse all articles below.')).toBeVisible();
-  await expect(page.locator('[data-static-article-list]')).toBeVisible();
-  await expect(page.locator('[data-search-results]')).toBeHidden();
-});
-
-test('search finds the published reading guide and filters by difficulty', async ({ page }) => {
-  await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('evidence');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
-  await page.getByLabel('Difficulty').selectOption('advanced');
-  await expect(page.getByText('Try another term or remove a filter.')).toBeVisible();
-  await page.getByLabel('Difficulty').selectOption('beginner');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
-});
-
-test('topic, difficulty, and combined filters return articles without a text query', async ({ page }) => {
-  await page.goto('/articles/');
-
-  await page.getByLabel('Topic').selectOption('openshift-lightspeed');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-  await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
-
-  await page.getByLabel('Difficulty').selectOption('beginner');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-
-  await page.getByLabel('Topic').selectOption('agentic-lightspeed');
-  await expect(page.getByText('0 articles found.')).toBeVisible();
-});
-
-test('empty result gives useful recovery guidance', async ({ page }) => {
-  await page.goto('/articles/');
-  await page.getByLabel('Difficulty').selectOption('advanced');
-  await expect(page.getByText('Try another term or remove a filter.')).toBeVisible();
-});
-
-test('topic query preselects the filter and filter changes update the URL', async ({ page }) => {
-  await page.goto('/articles/?topic=openshift-lightspeed');
-  await expect(page.getByLabel('Topic')).toHaveValue('openshift-lightspeed');
-  await page.getByLabel('Topic').selectOption('agentic-lightspeed');
-  await expect(page).toHaveURL(/topic=agentic-lightspeed/);
-});
-
-test('difficulty query state survives direct load, reload, and back-forward navigation', async ({ page }) => {
-  await page.goto('/articles/?topic=openshift-lightspeed&difficulty=beginner');
-  await expect(page.getByLabel('Topic')).toHaveValue('openshift-lightspeed');
-  await expect(page.getByLabel('Difficulty')).toHaveValue('beginner');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-
-  await page.reload();
-  await expect(page.getByLabel('Difficulty')).toHaveValue('beginner');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-
-  await page.goto('/about/');
-  await page.goBack();
-  await expect(page.getByLabel('Difficulty')).toHaveValue('beginner');
-  await expect(page.getByText('1 article found.')).toBeVisible();
-  await page.goForward();
-  await expect(page).toHaveURL(/\/about\/$/);
-  await page.goBack();
-  await expect(page.getByLabel('Difficulty')).toHaveValue('beginner');
 });
 
 test('static articles remain available when search cannot load', async ({ page }) => {
   await page.route('**/pagefind/pagefind.js', (route) => route.abort());
   await page.goto('/articles/');
-  await page.getByLabel('Search articles').fill('evidence');
-  await expect(page.getByText('Search is unavailable; browse all articles below.')).toBeVisible();
+  await page.getByRole('searchbox', { name: 'Search articles' }).fill('evidence');
+  await expect(page.getByText('Search is unavailable. Browse all articles below.')).toBeVisible();
   await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
+});
+
+test('removed routes and integrations are absent', async ({ request, page }) => {
+  expect((await request.get('/learning-paths/')).status()).toBe(404);
+  await page.goto('/');
+  await expect(page.locator('form[action*="buttondown"]')).toHaveCount(0);
+  await page.goto('/articles/start-learning-applied-ai-on-openshift/');
+  await expect(page.locator('script[src*="giscus"]')).toHaveCount(0);
 });
 
 test.describe('without JavaScript', () => {

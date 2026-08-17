@@ -1,5 +1,5 @@
 import rss from '@astrojs/rss';
-import { siteConfig } from '../config/site';
+import { siteConfig, withBase } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
 import { isPublished, sortNewest } from '../lib/posts';
 
@@ -16,7 +16,7 @@ export async function GET(context: { site?: URL }) {
       title: post.data.title,
       description: post.data.description,
       pubDate: post.data.publishedDate,
-      link: `/articles/${post.id}/`
+      link: withBase(`/articles/${post.id}/`)
     }))
   });
 }
