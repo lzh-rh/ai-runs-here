@@ -71,13 +71,28 @@ test('article presents source-backed learning aids as structured content', async
   await expect(workflow.locator('[data-workflow-step]')).toHaveCount(7);
 });
 
-test('failure chain is a readable list instead of a copyable code block', async ({ page }) => {
+test('failure chain is a connected cause-and-effect flow', async ({ page }) => {
   await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
 
   await expect(page.locator('pre').filter({ hasText: 'reporting-service v1.0.2' })).toHaveCount(0);
-  await expect(page.getByRole('listitem').filter({
-    hasText: 'reporting-service v1.0.2 leaks database connections'
-  })).toBeVisible();
+  const chain = page.getByRole('list', { name: 'Expected failure chain' });
+  const steps = chain.getByRole('listitem');
+  await expect(chain).toBeVisible();
+  await expect(steps).toHaveCount(5);
+  await expect(steps.locator('strong')).toHaveCount(5);
+
+  const presentation = await steps.evaluateAll((items) => items.map((item) => ({
+    top: Math.round(item.getBoundingClientRect().top),
+    arrow: getComputedStyle(item, '::after').content
+  })));
+
+  expect(presentation.slice(0, -1).map(({ arrow }) => arrow)).toEqual([
+    '"↓"', '"↓"', '"↓"', '"↓"'
+  ]);
+  expect(presentation.at(-1)?.arrow).toBe('none');
+  expect(presentation.map(({ top }) => top)).toEqual([...presentation]
+    .map(({ top }) => top)
+    .sort((a, b) => a - b));
 });
 
 test('article exposes its table of contents on mobile without JavaScript', async ({ page }) => {

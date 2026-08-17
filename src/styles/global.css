@@ -492,6 +492,58 @@ pre {
   margin-bottom: 0;
 }
 
+.failure-chain {
+  --failure-chain-marker-size: 2.25rem;
+  display: grid;
+  gap: 1.9rem;
+  margin: 1.5rem 0 1.75rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: failure-step;
+}
+
+.failure-chain > li {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--failure-chain-marker-size) minmax(0, 1fr);
+  align-items: center;
+  gap: 0.85rem;
+  min-height: 4rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--rule);
+  border-left: 4px solid var(--rh-red);
+  background: var(--paper);
+  counter-increment: failure-step;
+}
+
+.failure-chain > li::before {
+  display: grid;
+  width: var(--failure-chain-marker-size);
+  height: var(--failure-chain-marker-size);
+  place-items: center;
+  border-radius: 50%;
+  color: var(--paper);
+  background: var(--rh-red-dark);
+  content: counter(failure-step);
+  font: 700 0.88rem/1 var(--font-heading);
+}
+
+.failure-chain > li:not(:last-child)::after {
+  position: absolute;
+  bottom: -1.62rem;
+  left: calc(1rem + (var(--failure-chain-marker-size) / 2));
+  color: var(--rh-red-dark);
+  content: '↓';
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateX(-50%);
+}
+
+.failure-chain strong {
+  color: var(--ink);
+}
+
 .learning-objectives {
   margin: 2rem 0 2.75rem;
   padding: 1.35rem 1.5rem;

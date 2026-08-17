@@ -84,11 +84,13 @@ In the OpenShift web console, check that the sample applications are unhealthy a
 
 In this lab, the expected failure chain is:
 
-1. reporting-service v1.0.2 leaks database connections.
-2. PostgreSQL runs out of normal connection slots.
-3. payments-api cannot connect to PostgreSQL.
-4. Payment requests return HTTP 503.
-5. PaymentErrorRateHigh fires.
+<ol className="failure-chain" aria-label="Expected failure chain" role="list">
+  <li><span><strong>reporting-service v1.0.2</strong> leaks database connections.</span></li>
+  <li><span><strong>PostgreSQL</strong> runs out of normal connection slots.</span></li>
+  <li><span><strong>payments-api</strong> cannot connect to PostgreSQL.</span></li>
+  <li><span><strong>Payment requests</strong> return HTTP 503.</span></li>
+  <li><span><strong>PaymentErrorRateHigh</strong> fires.</span></li>
+</ol>
 
 This failure chain is the expected result for the lab. On another cluster, check its logs, events, metrics, and recent changes before deciding what caused the problem.
 
