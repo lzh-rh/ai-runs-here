@@ -49,19 +49,19 @@ describe('publication boundaries and truthful content', () => {
     }
   });
 
-  it('keeps the illustrative MCP outline private and publishes a non-lab reading guide', () => {
+  it('keeps the illustrative MCP outline private and publishes the verified Agentic lab', () => {
     const draft = source('src/content/posts/connect-mcp-server-to-lightspeed.mdx');
-    const guidePath = 'src/content/posts/start-learning-applied-ai-on-openshift.mdx';
+    const articlePath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.md';
 
     expect(draft).toMatch(/\ndraft: true\n/);
     expect(draft).toMatch(/\nkind: lab\n/);
     expect(draft).not.toMatch(/verified (?:OpenShift Lightspeed )?query/i);
     expect(draft).toContain('This draft does not connect an MCP server or perform a Lightspeed query.');
-    expect(existsSync(pathFromRoot(guidePath)), 'a truthful published guide should exist').toBe(true);
-    if (existsSync(pathFromRoot(guidePath))) {
-      expect(source(guidePath)).toMatch(/\ndraft: false\n/);
-      expect(source(guidePath)).toMatch(/\nkind: guide\n/);
-      expect(source(guidePath)).toContain('This is a reading guide, not a product lab.');
+    expect(existsSync(pathFromRoot(articlePath)), 'the verified Agentic lab should exist').toBe(true);
+    if (existsSync(pathFromRoot(articlePath))) {
+      expect(source(articlePath)).toMatch(/\ndraft: false\n/);
+      expect(source(articlePath)).toMatch(/\nkind: lab\n/);
+      expect(source(articlePath)).toContain('The example was live-verified on a disposable OpenShift `5.0.0-ec.5` cluster');
     }
   });
 });
@@ -89,7 +89,7 @@ describe('reviewed interface contracts', () => {
   });
 
   it('includes a representative published article in the axe route loop', () => {
-    expect(source('tests/site.spec.ts')).toContain("'/articles/start-learning-applied-ai-on-openshift/'");
+    expect(source('tests/site.spec.ts')).toContain("'/articles/how-agentic-troubleshooting-works-in-openshift/'");
   });
 });
 
