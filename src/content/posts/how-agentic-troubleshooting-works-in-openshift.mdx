@@ -418,7 +418,7 @@ data:
 | --- | --- |
 | `pollInterval` (`30s`) | How often the adapter asks Alertmanager for firing alerts. It does not control how long the investigation takes. |
 | `preRunDelay` (not set; default `0s`) | The minimum time an alert must stay active. The commented `5m` example does not apply. A delay can ignore short alerts. |
-| `postRunDelay` (`1h`) | Waits this long before the same problem can create another run after a run ends. This applies when the earlier run is Completed, Failed, Denied, or Escalated. |
+| `postRunDelay` (`1h`) | After a run for the same problem reaches Completed, Failed, Denied, or Escalated, the adapter waits one hour before it can create another run. The timer starts when the run enters that final state. The adapter matches the problem by its stable fingerprint. |
 | `filtering` (section) | Groups alert selection settings. |
 | `filtering.allowedReceivers` (empty until the lab enables `critical`) | Lists the Alertmanager receivers that the adapter accepts. An empty list creates no runs. Letter case does not matter. The adapter also skips severity `none` and `info`. |
 | `deduplication` (optional section) | Groups settings that help the adapter avoid duplicate runs for the same problem. |
@@ -443,9 +443,9 @@ For each alert that matches its rules, the adapter copies data into an AgenticRu
 
 | Input | Generated run field |
 | --- | --- |
-| Alert name, severity, identifiers, start time, and summary | Run name, labels, and annotations. Annotations are extra notes that help you trace the alert and avoid duplicate runs. |
-| Alert `namespace` label | `spec.targetNamespaces`; the `AgenticRun` object itself remains in `openshift-lightspeed` |
-| Alert details | A `spec.request` built from the alert details that asks the analysis agent to investigate |
+| Alert identification details | Run name, labels, and annotations. They connect the run to the original alert. The name and labels also help avoid duplicate runs. |
+| Alert `namespace` label | `spec.targetNamespaces`; the `AgenticRun` remains in `openshift-lightspeed`. |
+| Alert investigation details | A `spec.request` that asks the analysis agent to investigate. |
 | `agent.*` | `spec.analysis.agent`, `spec.execution.agent`, and `spec.verification.agent` |
 | Shared `tools.skills` | `spec.tools.skills` |
 | Tool settings for one stage | `spec.analysis.tools`, `spec.execution.tools`, or `spec.verification.tools` |
@@ -464,7 +464,10 @@ I tested this workflow on OpenShift 5.0.0-ec.6. Review the evidence before appro
 
 - [OpenShift 5 Early Access Agentic troubleshooting exercise](https://rhpds.github.io/ocp5-ea-showroom/modules/agentic-troubleshooting.html)
 - [Alerts Adapter repository: open `README.md` for configuration and `ARCHITECTURE.md` for the design](https://github.com/openshift/lightspeed-agentic-alerts-adapter)
+- [Alerts Adapter source: post-run delay and terminal states](https://github.com/openshift/lightspeed-agentic-alerts-adapter/blob/a916e728f9e9b0355334bb25f3f21f2c855a0a2a/internal/adapter/adapter.go#L246-L308)
+- [Alerts Adapter source: generated AgenticRun fields](https://github.com/openshift/lightspeed-agentic-alerts-adapter/blob/a916e728f9e9b0355334bb25f3f21f2c855a0a2a/internal/agenticrun/build.go#L65-L133)
 - [Lightspeed Agentic Operator repository](https://github.com/openshift/lightspeed-agentic-operator)
+- [AgenticRun API definition](https://github.com/openshift/lightspeed-agentic-operator/blob/b720c3c073892a11fbba88b8916febe955de83eb/api/v1alpha1/agenticrun_types.go#L278-L368)
 - [Lightspeed Agentic Sandbox repository](https://github.com/openshift/lightspeed-agentic-sandbox)
 - [investigate-alert skill](https://github.com/openshift/agentic-skills/tree/main/cluster-troubleshoot/investigate-alert)
 
