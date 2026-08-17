@@ -1,25 +1,95 @@
-import { readFile } from 'node:fs/promises';
-import { join, resolve } from 'node:path';
+import { existsSync } from 'node:fs';
+import { readFile, readdir } from 'node:fs/promises';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { close, createIndex } from 'pagefind';
-
-const articleGlob = 'articles/*/index.html';
+import { resolveBasePath } from '../src/config/site-url.mjs';
 
 function assertNoErrors(stage, errors) {
   if (errors.length) throw new Error(`Pagefind ${stage} failed:\n${errors.join('\n')}`);
 }
 
-export async function buildArticleSearchIndex({
-  siteDirectory = resolve('dist'),
-  outputDirectory = join(siteDirectory, 'pagefind')
+export function resolvePagefindPaths({
+  distDirectory = resolve('dist'),
+  basePath = process.env.PUBLIC_BASE_PATH
 } = {}) {
+  const urlPrefix = resolveBasePath(basePath);
+  const baseSegment = urlPrefix.replace(/^\/+|\/+$/g, '');
+  const nestedSiteDirectory = baseSegment ? join(distDirectory, baseSegment) : distDirectory;
+  const nestedArticleDirectory = join(nestedSiteDirectory, 'articles');
+  const hasNestedSite = existsSync(join(nestedSiteDirectory, 'index.html')) || existsSync(nestedArticleDirectory);
+  const siteDirectory = baseSegment && hasNestedSite
+    ? nestedSiteDirectory
+    : distDirectory;
+  const articleDirectory = join(siteDirectory, 'articles');
+
+  return {
+    siteDirectory,
+    outputDirectory: join(siteDirectory, 'pagefind'),
+    articleDirectory,
+    urlPrefix
+  };
+}
+
+function assertUrlUsesBaseOnce(url, basePath) {
+  const baseSegment = basePath.replace(/^\/+|\/+$/g, '');
+  const duplicatePrefix = baseSegment ? `${basePath}${baseSegment}/` : '//';
+  if (!url.startsWith(basePath) || url.startsWith(duplicatePrefix)) {
+    throw new Error(`Pagefind URL must include PUBLIC_BASE_PATH exactly once: ${url}`);
+  }
+}
+
+export function resolveArticleUrl({ siteDirectory, articleFile, basePath = process.env.PUBLIC_BASE_PATH }) {
+  const urlPrefix = resolveBasePath(basePath);
+  const relativePath = relative(siteDirectory, articleFile).split(sep).join('/');
+  if (isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith('../')) {
+    throw new Error(`Pagefind article is outside the built site root: ${articleFile}`);
+  }
+  const route = relativePath.replace(/index\.html$/, '');
+  const url = `${urlPrefix}${route}`;
+  assertUrlUsesBaseOnce(url, urlPrefix);
+  return url;
+}
+
+async function findArticleFiles(articleDirectory) {
+  let entries;
+  try {
+    entries = await readdir(articleDirectory, { withFileTypes: true });
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return [];
+    throw error;
+  }
+
+  return entries
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => join(articleDirectory, entry.name, 'index.html'))
+    .filter((file) => existsSync(file))
+    .sort();
+}
+
+export async function buildArticleSearchIndex(options = {}) {
+  const paths = resolvePagefindPaths({
+    distDirectory: options.distDirectory ?? resolve('dist'),
+    basePath: options.basePath
+  });
+  const siteDirectory = options.siteDirectory ?? paths.siteDirectory;
+  const outputDirectory = options.outputDirectory ?? join(siteDirectory, 'pagefind');
+  const basePath = resolveBasePath(options.basePath ?? process.env.PUBLIC_BASE_PATH);
+  const articleFiles = await findArticleFiles(join(siteDirectory, 'articles'));
   const created = await createIndex();
   assertNoErrors('initialization', created.errors);
   if (!created.index) throw new Error('Pagefind initialization did not return an index.');
 
   try {
-    const indexed = await created.index.addDirectory({ path: siteDirectory, glob: articleGlob });
-    assertNoErrors('article indexing', indexed.errors);
+    for (const articleFile of articleFiles) {
+      const url = resolveArticleUrl({ siteDirectory, articleFile, basePath });
+      const indexed = await created.index.addHTMLFile({
+        url,
+        content: await readFile(articleFile, 'utf8')
+      });
+      assertNoErrors('article indexing', indexed.errors);
+      assertUrlUsesBaseOnce(indexed.file.url, basePath);
+    }
 
     const written = await created.index.writeFiles({ outputPath: outputDirectory });
     assertNoErrors('artifact write', written.errors);
@@ -29,13 +99,13 @@ export async function buildArticleSearchIndex({
       (total, language) => total + Number(language.page_count ?? 0),
       0
     );
-    if (artifactCount !== indexed.page_count) {
+    if (artifactCount !== articleFiles.length) {
       throw new Error(
-        `Pagefind article scope mismatch: indexed ${indexed.page_count}, artifact contains ${artifactCount}.`
+        `Pagefind article scope mismatch: indexed ${articleFiles.length}, artifact contains ${artifactCount}.`
       );
     }
 
-    return indexed.page_count;
+    return articleFiles.length;
   } finally {
     await created.index.deleteIndex();
     await close();

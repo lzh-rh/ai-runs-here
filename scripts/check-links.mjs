@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { load } from 'cheerio';
+import { resolveBasePath } from '../src/config/site-url.mjs';
 
 const internalOrigin = 'https://internal.example';
 
@@ -33,21 +34,31 @@ function safeDecode(value) {
   }
 }
 
-function routeForFile(root, file) {
+function routeForFile(root, file, basePath) {
   const path = relative(root, file).split(sep).join('/');
-  if (path === 'index.html') return '/';
-  if (path.endsWith('/index.html')) return `/${path.slice(0, -'index.html'.length)}`;
-  return `/${path}`;
+  const route = path === 'index.html'
+    ? '/'
+    : path.endsWith('/index.html')
+      ? `/${path.slice(0, -'index.html'.length)}`
+      : `/${path}`;
+  return `${basePath}${route.replace(/^\/+/, '')}`;
 }
 
-function targetForPath(root, pathname) {
+function targetForPath(root, pathname, basePath) {
   const decoded = safeDecode(pathname);
   if (!decoded || !decoded.startsWith('/') || decoded.startsWith('//') || decoded.includes('\0')) {
     return undefined;
   }
 
-  const relativePath = decoded.replace(/^\/+/, '');
-  const targetRelative = decoded.endsWith('/')
+  const artifactPath = basePath === '/'
+    ? decoded
+    : decoded.startsWith(basePath)
+      ? `/${decoded.slice(basePath.length)}`
+      : undefined;
+  if (!artifactPath) return undefined;
+
+  const relativePath = artifactPath.replace(/^\/+/, '');
+  const targetRelative = artifactPath.endsWith('/')
     ? join(relativePath, 'index.html')
     : extname(relativePath)
       ? relativePath
@@ -57,7 +68,11 @@ function targetForPath(root, pathname) {
   return target.startsWith(rootPrefix) ? target : undefined;
 }
 
-export async function checkInternalLinks(root = join(process.cwd(), 'dist')) {
+export async function checkInternalLinks(
+  root = join(process.cwd(), 'dist'),
+  { basePath = process.env.PUBLIC_BASE_PATH } = {}
+) {
+  const normalizedBasePath = resolveBasePath(basePath);
   const htmlFiles = (await walk(root)).filter((file) => file.endsWith('.html'));
   const missing = [];
   const targetCache = new Map();
@@ -79,7 +94,7 @@ export async function checkInternalLinks(root = join(process.cwd(), 'dist')) {
 
   for (const file of htmlFiles) {
     const sourcePath = relative(root, file).split(sep).join('/');
-    const sourceUrl = new URL(routeForFile(root, file), internalOrigin);
+    const sourceUrl = new URL(routeForFile(root, file, normalizedBasePath), internalOrigin);
     const $ = load(await readFile(file, 'utf8'));
 
     for (const element of $('a[href]').toArray()) {
@@ -95,7 +110,7 @@ export async function checkInternalLinks(root = join(process.cwd(), 'dist')) {
       }
       if (url.origin !== internalOrigin) continue;
 
-      const target = targetForPath(root, url.pathname);
+      const target = targetForPath(root, url.pathname, normalizedBasePath);
       if (!target || !(await exists(target))) {
         missing.push(`${sourcePath} -> ${href}`);
         continue;

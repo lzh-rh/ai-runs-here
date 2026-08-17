@@ -50,7 +50,9 @@ const siteBase = withBase('/');
         const parsed = new URL(url, window.location.origin);
         const basePath = siteBaseUrl.pathname.replace(/^\/+|\/+$/g, '');
         let path = parsed.pathname.replace(/^\/+/, '');
-        if (basePath && path.startsWith(`${basePath}/`)) path = path.slice(basePath.length + 1);
+        while (basePath && path.startsWith(`${basePath}/`)) {
+          path = path.slice(basePath.length + 1);
+        }
         const resolved = new URL(path, siteBaseUrl);
         resolved.search = parsed.search;
         resolved.hash = parsed.hash;

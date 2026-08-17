@@ -32,6 +32,15 @@ export function resolveSiteUrl(value, { production = false } = {}) {
   return url.origin;
 }
 
+export function resolveBasePath(value) {
+  const raw = value?.trim() || '/';
+  if (raw.includes('?') || raw.includes('#') || raw.includes('..') || raw.startsWith('//')) {
+    throw new Error('PUBLIC_BASE_PATH must be a root-relative GitHub Pages base path.');
+  }
+  const segment = raw.replace(/^\/+|\/+$/g, '');
+  return segment ? `/${segment}/` : '/';
+}
+
 export function isProductionBuild(argv = process.argv) {
   return argv.includes('build');
 }

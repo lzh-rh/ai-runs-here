@@ -23,7 +23,7 @@ describe('internal route and fragment validation', () => {
       'guide/index.html': '<h1 id="guide-title">Guide</h1>'
     });
 
-    await expect(checkInternalLinks(root)).resolves.toEqual([
+    await expect(checkInternalLinks(root, { basePath: '/' })).resolves.toEqual([
       'index.html -> #missing-home (missing fragment target)',
       'index.html -> /guide/#missing-guide (missing fragment target)'
     ]);
@@ -40,6 +40,16 @@ describe('internal route and fragment validation', () => {
       'articles/start/index.html': '<h1 id="start-here">Start</h1>'
     });
 
-    await expect(checkInternalLinks(root)).resolves.toEqual(['index.html -> /missing/']);
+    await expect(checkInternalLinks(root, { basePath: '/' })).resolves.toEqual(['index.html -> /missing/']);
+  });
+
+  it('resolves repository-subpath URLs against the static artifact root', async () => {
+    const { checkInternalLinks } = await import(scriptUrl.href);
+    const root = await fixture({
+      'index.html': '<a href="/ai-runs-here/guide/#start-here">Guide</a>',
+      'guide/index.html': '<h1 id="start-here">Guide</h1>'
+    });
+
+    await expect(checkInternalLinks(root, { basePath: '/ai-runs-here/' })).resolves.toEqual([]);
   });
 });

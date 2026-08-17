@@ -3,53 +3,52 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { resolveBasePath } from '../src/config/site-url.mjs';
 
 const root = new URL('../', import.meta.url);
 const pathFromRoot = (relativePath: string) => new URL(relativePath, root);
 const source = (relativePath: string) => readFileSync(pathFromRoot(relativePath), 'utf8');
 
-describe('deployment artifact', () => {
-  it('copies Pagefind into the Vercel static artifact and asserts the browser entry exists', async () => {
-    const scriptUrl = pathFromRoot('scripts/sync-pagefind-to-vercel.mjs');
-    expect(existsSync(scriptUrl), 'the Pagefind deployment sync script should exist').toBe(true);
-    if (!existsSync(scriptUrl)) return;
-
-    const { syncPagefindToVercel } = await import(scriptUrl.href);
-    const directory = await mkdtemp(join(tmpdir(), 'pagefind-vercel-'));
-    const sourceDirectory = join(directory, 'dist', 'pagefind');
-    const staticDirectory = join(directory, '.vercel', 'output', 'static');
-    await mkdir(sourceDirectory, { recursive: true });
-    await mkdir(staticDirectory, { recursive: true });
-    await writeFile(join(sourceDirectory, 'pagefind.js'), 'export const ready = true;');
-    await writeFile(join(directory, '.vercel', 'output', 'config.json'), '{}');
-
-    const deployedEntry = await syncPagefindToVercel({ sourceDirectory, staticDirectory });
-
-    expect(await readFile(deployedEntry, 'utf8')).toContain('ready = true');
-    expect(deployedEntry).toBe(join(staticDirectory, 'pagefind', 'pagefind.js'));
-  });
-
-  it('does not manufacture a static directory when the adapter artifact is absent', async () => {
-    const scriptUrl = pathFromRoot('scripts/sync-pagefind-to-vercel.mjs');
-    if (!existsSync(scriptUrl)) return;
-    const { syncPagefindToVercel } = await import(scriptUrl.href);
-    const directory = await mkdtemp(join(tmpdir(), 'pagefind-no-vercel-'));
-    const sourceDirectory = join(directory, 'dist', 'pagefind');
-    const staticDirectory = join(directory, '.vercel', 'output', 'static');
-    await mkdir(sourceDirectory, { recursive: true });
-    await writeFile(join(sourceDirectory, 'pagefind.js'), 'export const ready = true;');
-
-    await expect(syncPagefindToVercel({ sourceDirectory, staticDirectory })).rejects.toThrow(
-      'Vercel adapter artifact is missing'
+describe('GitHub Pages deployment artifact', () => {
+  it.each([
+    ['root output', '/', ''],
+    ['repository-subpath output', '/ai-runs-here/', 'ai-runs-here']
+  ])('locates %s and writes Pagefind next to the built site root', async (_name, basePath, siteSegment) => {
+    const scriptUrl = pathFromRoot('scripts/build-pagefind.mjs');
+    const { buildArticleSearchIndex, resolveArticleUrl, resolvePagefindPaths } = await import(scriptUrl.href);
+    const directory = await mkdtemp(join(tmpdir(), 'pagefind-paths-'));
+    const distDirectory = join(directory, 'dist');
+    const siteDirectory = siteSegment ? join(distDirectory, siteSegment) : distDirectory;
+    await mkdir(join(siteDirectory, 'articles', 'published-post'), { recursive: true });
+    await writeFile(
+      join(siteDirectory, 'articles', 'published-post', 'index.html'),
+      '<html lang="en"><body><article data-pagefind-body>Published article</article></body></html>'
     );
+    const articleFile = join(siteDirectory, 'articles', 'published-post', 'index.html');
+
+    expect(resolvePagefindPaths({ distDirectory, basePath })).toEqual({
+      siteDirectory,
+      outputDirectory: join(siteDirectory, 'pagefind'),
+      articleDirectory: join(siteDirectory, 'articles'),
+      urlPrefix: basePath
+    });
+    expect(resolveArticleUrl({ siteDirectory, articleFile, basePath })).toBe(
+      `${basePath}articles/published-post/`
+    );
+    expect(await buildArticleSearchIndex({ distDirectory, basePath })).toBe(1);
+    expect(existsSync(join(siteDirectory, 'pagefind', 'pagefind.js'))).toBe(true);
   });
 
-  it('runs the deployment assertion as part of every production build', () => {
-    const pkg = JSON.parse(source('package.json')) as { scripts: Record<string, string> };
+  it('locates an empty repository-subpath output from its site entry point', async () => {
+    const { resolvePagefindPaths } = await import(pathFromRoot('scripts/build-pagefind.mjs').href);
+    const directory = await mkdtemp(join(tmpdir(), 'pagefind-empty-paths-'));
+    const distDirectory = join(directory, 'dist');
+    const siteDirectory = join(distDirectory, 'ai-runs-here');
+    await mkdir(siteDirectory, { recursive: true });
+    await writeFile(join(siteDirectory, 'index.html'), '<html lang="en"><body>Empty site</body></html>');
 
-    expect(pkg.scripts.build).toContain('sync-pagefind-to-vercel.mjs');
-    expect(pkg.scripts['check:deployment-artifact']).toBeDefined();
-    expect(pkg.scripts.verify).toContain('check:deployment-artifact');
+    expect(resolvePagefindPaths({ distDirectory, basePath: '/ai-runs-here/' }).siteDirectory)
+      .toBe(siteDirectory);
   });
 
   it('indexes only article detail routes and still writes an empty article index', async () => {
@@ -86,6 +85,23 @@ describe('deployment artifact', () => {
     expect(JSON.parse(await readFile(join(emptyOutput, 'pagefind-entry.json'), 'utf8')))
       .toMatchObject({ languages: {} });
     expect(existsSync(join(emptyOutput, 'pagefind.js'))).toBe(true);
+  });
+});
+
+describe('GitHub Pages base path', () => {
+  it.each([
+    [undefined, '/'],
+    ['', '/'],
+    ['/', '/'],
+    ['ai-runs-here', '/ai-runs-here/'],
+    ['/ai-runs-here', '/ai-runs-here/'],
+    ['/ai-runs-here/', '/ai-runs-here/']
+  ])('normalizes %s to %s', (input, expected) => {
+    expect(resolveBasePath(input)).toBe(expected);
+  });
+
+  it.each(['//evil.example', '/repo?x=1', '/repo#frag', '/repo/../admin'])('rejects %s', (input) => {
+    expect(() => resolveBasePath(input)).toThrow(/base path/i);
   });
 });
 
