@@ -6,7 +6,6 @@ export const siteConfig = {
   description: 'Tested labs, useful diagrams, and honest notes from the terminal.',
   navigation: [
     { label: 'Articles', href: '/articles/' },
-    { label: 'Learning paths', href: '/learning-paths/' },
     { label: 'About', href: '/about/' }
   ]
 } as const;

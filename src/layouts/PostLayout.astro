@@ -1,7 +1,6 @@
 ---
 import type { MarkdownHeading } from 'astro';
 import CodeCopy from '../components/CodeCopy.astro';
-import GiscusComments from '../components/GiscusComments.astro';
 import PostCard from '../components/PostCard.astro';
 import { topicConfig } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
@@ -157,7 +156,6 @@ const formatDate = (date: Date) =>
       </section>
     )}
 
-    <GiscusComments />
     <CodeCopy />
   </div>
 </BaseLayout>

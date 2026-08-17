@@ -1,8 +1,6 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
-import NewsletterForm from '../components/NewsletterForm.astro';
 import PostCard from '../components/PostCard.astro';
-import TerminalStatus from '../components/TerminalStatus.astro';
 import TopicRail from '../components/TopicRail.astro';
 import { siteConfig } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
@@ -22,18 +20,6 @@ const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?
         <h1 class="display hero__title" id="home-title">Applied AI, step by step.</h1>
         <p class="hero__promise">{siteConfig.description}</p>
       </div>
-      <aside class="hero__aside" aria-label="Current lab status">
-        <p class="eyebrow">Current bench note</p>
-        <TerminalStatus
-          label="MCP to Lightspeed"
-          lines={[
-            'Scope: connection workflow',
-            'Evidence: pending a live lab run',
-            'Next: record exact versions and output'
-          ]}
-          verified={false}
-        />
-      </aside>
     </section>
 
     <TopicRail />
@@ -44,15 +30,13 @@ const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?
         <p>Practical walkthroughs and explanations that separate observed results from the next thing to test.</p>
       </div>
       {featuredPost ? (
-        <div class="post-grid">
+        <section class="article-list" aria-label="Featured and recent field notes">
           <PostCard post={featuredPost} featured />
           {recentPosts.map((post) => <PostCard post={post} />)}
-        </div>
+        </section>
       ) : (
         <p>No published field notes yet. The first lab is still on the workbench.</p>
       )}
     </section>
-
-    <NewsletterForm />
   </div>
 </BaseLayout>

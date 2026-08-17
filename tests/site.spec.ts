@@ -1,10 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 
-test.beforeEach(async ({ page }) => {
-  await page.route('https://giscus.app/**', (route) => route.abort());
-});
-
 test('initial search state keeps the published article list visible', async ({ page }) => {
   await page.goto('/articles/');
   await expect(page.getByText('Browse all articles below.')).toBeVisible();
@@ -16,6 +12,15 @@ test('production excludes draft articles and draft-preview badges', async ({ pag
   await page.goto('/articles/');
   await expect(page.getByRole('link', { name: /Connect an MCP server/ })).toHaveCount(0);
   await expect(page.getByText('Draft preview')).toHaveCount(0);
+});
+
+test('home omits removed integrations, learning paths, terminal status, and card grids', async ({ page }) => {
+  await page.goto('/');
+
+  await expect(page.getByText('Lab notes by email')).toHaveCount(0);
+  await expect(page.getByText('Current bench note')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'Learning paths' })).toHaveCount(0);
+  await expect(page.locator('.post-grid')).toHaveCount(0);
 });
 
 test('clearing every search control restores the published article list', async ({ page }) => {
@@ -106,19 +111,10 @@ test.describe('without JavaScript', () => {
   });
 });
 
-test('shows a visible message when the comments script cannot load', async ({ page }) => {
-  await page.goto('/articles/start-learning-applied-ai-on-openshift/');
-  await expect(page.locator('[data-comments-fallback]')).toBeVisible();
-  await expect(page.locator('[data-comments-status]')).toHaveText(
-    'Comments are currently unavailable. The article remains available above.'
-  );
-});
-
 test('core pages have no serious accessibility violations', async ({ page }) => {
   for (const path of [
     '/',
     '/articles/',
-    '/learning-paths/',
     '/about/',
     '/articles/start-learning-applied-ai-on-openshift/'
   ]) {
