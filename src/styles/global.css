@@ -235,10 +235,6 @@ pre {
   text-decoration-thickness: 2px;
 }
 
-.home-intro {
-  padding-block: clamp(4rem, 10vw, 8rem);
-}
-
 .home-intro__summary,
 .topic-header .reading-column > p:last-child,
 .about-page__intro {

@@ -24,6 +24,19 @@ test('home exposes exactly the three primary topic links', async ({ page }) => {
   await expect(page.getByText(/newsletter/i)).toHaveCount(0);
 });
 
+test('home intro uses the shared section spacing at desktop and mobile widths', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/');
+  const homeIntro = page.locator('.home-intro');
+
+  await expect(homeIntro).toHaveCSS('padding-top', '64px');
+  await expect(homeIntro).toHaveCSS('padding-bottom', '64px');
+
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(homeIntro).toHaveCSS('padding-top', '40px');
+  await expect(homeIntro).toHaveCSS('padding-bottom', '40px');
+});
+
 test('every topic route has a title and article or empty state', async ({ page }) => {
   for (const slug of ['openshift-lightspeed', 'agentic-lightspeed', 'mcp']) {
     await page.goto(`/topics/${slug}/`);
