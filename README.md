@@ -1,208 +1,140 @@
 # AI Runs Here
 
-## Purpose and disclaimer
+## Purpose and personal/unofficial disclaimer
 
-AI Runs Here is a personal site for practical labs, diagrams, and field notes about Applied AI on OpenShift. Its editorial promise is: “Tested labs, useful diagrams, and honest notes from the terminal.”
+AI Runs Here is Li's personal publication for practical notes about Applied AI on OpenShift. It is not an official Red Hat website, product-documentation site, or statement of Red Hat support. Treat each post as a field note and confirm product behavior with the linked sources of record.
 
-This is a personal learning publication. It is not an official Red Hat website, product-documentation site, or statement of Red Hat support.
+## Requirements and local setup
 
-## Requirements
-
-- Node.js 22 (the project requires Node.js 22.12 or newer)
-- npm
-
-## Install, run, and verify
-
-Install the pinned dependencies:
+Use Node.js 22.12 or newer and npm. From the repository root:
 
 ```bash
-npm install
-```
-
-Start the local authoring server:
-
-```bash
+npm ci
+cp .env.example .env
 npm run dev
 ```
 
-Local development uses `http://localhost:4321` when `PUBLIC_SITE_URL` is not set. Production builds do not use that fallback: `PUBLIC_SITE_URL` must be an absolute HTTP(S) origin such as `https://blog.example.com`, with no path, query, or fragment.
+Open the URL printed by Astro. With the example values unchanged, use `http://localhost:4321/repository-name/`; replace both placeholders before a real deployment. Keep `.env` local; commit only `.env.example`.
 
-Before publishing, run the same release gate used by the project:
+## Content topics and MCP labels
 
-```bash
-PUBLIC_BUTTONDOWN_USERNAME=test PUBLIC_SITE_URL=https://example.com npm run verify
-```
+Posts live in `src/content/posts/` as Markdown or MDX. Use one of these topic slugs:
 
-`npm run verify` runs the Vitest suite, Astro checks, the production build, Pagefind indexing, Vercel deployment-artifact validation, internal-link validation, and Playwright desktop/mobile tests. The build copies Pagefind into `.vercel/output/static/pagefind/` after the Astro adapter creates the Vercel artifact, then asserts `.vercel/output/static/pagefind/pagefind.js` exists. The values above are deliberately non-secret test values; use the real public values in Vercel.
+- `openshift-lightspeed` — OpenShift Lightspeed
+- `agentic-lightspeed` — Agentic Lightspeed
+- `mcp` — MCP
 
-## Post frontmatter
+Only an MCP post may use `mcpLabels`. Its allowed values are:
 
-Posts are Markdown or MDX files under `src/content/posts/`. This template includes every field accepted by `postSchema`; `updatedDate`, `learningPath`, and `image` may be removed when they do not apply.
+- `mcp-gateway` — MCP Gateway
+- `mcp-server` — MCP Server
+- `mcp-lifecycle-operator` — MCP Lifecycle Operator
+
+Use `mcpLabels: []` for a non-MCP post. The content schema rejects unknown topics or labels and rejects MCP labels on another topic.
+
+## Frontmatter template with `mcpLabels`
+
+Start a new post as a draft. This example makes no claim that a product workflow was tested:
 
 ```yaml
 ---
-kind: lab
-title: "Connect a service to an Applied AI workflow"
-description: "A concise summary between 20 and 180 characters for article lists, search, and social metadata."
-publishedDate: 2026-07-20
-updatedDate: 2026-07-20
+kind: guide
+title: "Plan an MCP experiment on OpenShift"
+description: "A field-note template for recording an MCP experiment without claiming an unverified result."
+publishedDate: 2026-08-17
+updatedDate: 2026-08-17
 topic: mcp
+mcpLabels:
+  - mcp-server
 tags:
-  - openshift
-  - integration
-difficulty: intermediate
-estimatedMinutes: 20
-testedVersions:
-  - "OpenShift Container Platform 4.20.0"
-  - "Example service 1.2.3"
+  - experiment
+difficulty: beginner
+estimatedMinutes: 10
+testedVersions: []
 prerequisites:
-  - "Access to a test cluster"
-  - "The oc CLI is authenticated"
+  - "Access to a safe test environment"
 draft: true
 featured: false
-learningPath:
-  id: mcp
-  order: 1
-image: /images/example-social.svg
+image: /social-default.svg
 ---
 ```
 
-Use `kind: lab` for hands-on product procedures and `kind: guide` for explanatory or editorial material. Use exact product versions in `testedVersions`; do not replace them with an unverified range such as `latest`. A guide or draft lab may use `testedVersions: []`; the tested-versions panel is then omitted. The schema rejects a published lab with no tested version, and a product lab must remain a draft until its exact versions and results have been reviewed.
+Use `kind: lab` for a tested procedure and `kind: guide` for explanatory writing. Remove optional `updatedDate` and `image` when they do not apply. A published lab must list the exact versions actually tested; never substitute `latest`, a guessed range, or a version copied from unrelated documentation.
 
-The schema trims frontmatter text before validating it, rejects whitespace-only values, and requires `updatedDate` to be the same as or later than `publishedDate`.
+## Create, preview, publish, update, return-to-draft, and delete workflows
 
-## Author workflows
+### Create and preview
 
-### Create
-
-1. Create `src/content/posts/<slug>.mdx`, using a short lowercase, hyphenated slug.
-2. Copy the full frontmatter template and keep `draft: true`.
-3. Add the article body and useful alt text for each meaningful image.
-4. Run `npm run dev` and open the local URL printed by Astro.
-
-### Preview
-
-Drafts are available during local development on their article routes, the Articles page, the homepage, related-post results, and any selected learning path. Production builds exclude those routes and references. Exercise commands in a safe environment and record the exact versions tested. Run `npm run verify` before requesting editorial or technical review.
+1. Create `src/content/posts/<short-lowercase-slug>.mdx` from the template.
+2. Keep `draft: true` while writing and testing.
+3. Run `npm run dev` and review the draft route, article list, topic page, links, images, and mobile layout. Drafts are visible locally in development.
 
 ### Publish
 
-`draft: true` is required until a lab's commands and tested versions have been reviewed. After that review:
-
-1. Set `draft: false` and set `publishedDate` to the intended publication date.
-2. Decide whether the post should be `featured` and verify its learning-path order, if any.
-3. Run `PUBLIC_BUTTONDOWN_USERNAME=test PUBLIC_SITE_URL=https://example.com npm run verify`.
-4. Commit and push the reviewed source. Vercel publishes the new production build from the configured production branch.
+1. For a lab, run every procedure in a safe environment and record only the exact versions and results observed.
+2. Set `draft: false`; set `publishedDate`; update `featured` only when intentional.
+3. Run the root and project-site checks in **Local verification**.
+4. Commit and push the reviewed change to `main`. The repository workflow verifies and deploys it.
 
 ### Update
 
-Edit the existing source rather than creating a duplicate. Keep `publishedDate` unchanged, set `updatedDate` to the date of the material update, refresh `testedVersions`, rerun the commands, run the release gate, and push the reviewed commit.
+Edit the existing file. Keep `publishedDate`, add or refresh `updatedDate`, rerun any affected procedure, refresh truthful `testedVersions`, verify, commit, and push.
 
 ### Return to draft
 
-Set `draft: true`, run the release gate, and push. Production pages, Pagefind search, RSS, and the sitemap exclude the post after Vercel rebuilds the site. Keep in mind that a draft flag does not erase copies that were already published or cached.
+Set `draft: true`, verify, commit, and push. The next production build removes the post from its route, listings, search, RSS, and sitemap. Previously published or cached copies may still exist elsewhere.
 
 ### Delete
 
-Remove the post source and any article-only assets that no other post uses. Remove links to that route, run the release gate so the link checker can find stale references, then commit and push. The route disappears at the next Vercel deployment.
+Delete the post and assets used only by it, remove links to its route, verify, commit, and push. The link checker catches internal references left behind.
 
-## Images
+## Images and tested-version truthfulness
 
-- Put article-specific body images beside the article source. For multiple assets, keep `src/content/posts/<slug>.mdx`, add a neighboring `src/content/posts/<slug>-assets/` directory, and reference its files with relative paths such as `./<slug>-assets/diagram.png`.
-- Put shared interface, brand, and social assets under `public/`; reference them with root-relative URLs such as `/images/diagram.svg`.
-- The frontmatter `image` value is used as a metadata URL, so its file must be served from `public/` and its value must start with `/`.
-- Use descriptive lowercase filenames, compress raster images, and include useful alt text. Mark decorative images with empty alt text.
-- Do not commit credentials, private screenshots, customer data, or assets without publication rights.
+Keep shared public assets in `public/` and reference them with base-aware site URLs. Keep article-only images beside the article or in a neighboring `<slug>-assets/` directory and import them from the MDX file. Use descriptive filenames and alt text, compress raster images, and never publish credentials, customer data, private screenshots, or assets without publication rights.
 
-## Add a controlled topic
+`testedVersions` is evidence, not a compatibility promise. Add a version only after running the documented workflow on that version. Leave it empty for a guide or draft lab when no product version was tested; a lab cannot be published until the schema has at least one exact tested version.
 
-A topic must exist in both the schema and display configuration:
+## Local verification
 
-1. Add its slug to the `topics` tuple in `src/content.config.ts`.
-2. Add the same key, label, and description to `topicConfig` in `src/config/site.ts`.
-3. Use the slug in a post's `topic` field.
-4. Run `npm run verify`. Type checking catches a missing `topicConfig` entry.
-
-## Add a learning path
-
-A learning-path identifier must also exist in both places:
-
-1. Add the identifier to the `learningPath.id` enum in `src/content.config.ts`.
-2. Add the same key, label, and description to `learningPathConfig` in `src/config/site.ts`.
-3. Assign published posts that identifier plus unique positive `order` values.
-4. Run `npm run verify` and inspect `/learning-paths/`.
-
-A path appears only after it contains at least one published post. Use stable identifiers because changing one requires updating every post that refers to it.
-
-## Deploy with Vercel
-
-1. Push this project to the public GitHub repository that will own the site.
-2. In Vercel, choose **Add New → Project**, import that repository, and select the production branch.
-3. Let Vercel detect Astro and use `npm run build` as the build command. The Astro Vercel adapter creates `.vercel/output`; the final build step adds the Pagefind files to its `static` directory. Leave Vercel's output-directory override unset when using the adapter artifact.
-4. Set the Node.js runtime to 22.
-5. Add `PUBLIC_SITE_URL` for Production with the final public origin, for example `https://blog.example.com`. Do not include a path. Add the real Buttondown and Giscus values described below.
-6. Deploy, then confirm canonical links, Open Graph URLs, RSS, and `sitemap-index.xml` use the final origin.
-
-To check the generated deployment artifact locally after a build, run:
+Run both release modes before publishing:
 
 ```bash
-npm run check:deployment-artifact
+PUBLIC_SITE_URL=https://blog.example.com PUBLIC_BASE_PATH=/ PLAYWRIGHT_BASE_PATH=/ npm run verify
+PUBLIC_SITE_URL=https://example.github.io PUBLIC_BASE_PATH=/ai-runs-here/ PLAYWRIGHT_BASE_PATH=/ai-runs-here/ npm run verify
 ```
 
-It fails unless `.vercel/output/static/pagefind/pagefind.js` exists. You can also confirm the required production URL guard by running `PUBLIC_BUTTONDOWN_USERNAME=test npm run build`; the command must fail with a `PUBLIC_SITE_URL is required` message.
+Each command runs unit tests, Astro checks, the static build, article-only Pagefind indexing, internal-link checks, and browser tests. The browser suite checks navigation, search, drafts, RSS, sitemap, accessibility, and responsive overflow.
 
-All current integration values are public identifiers, not secrets. If a future integration adds a secret, store it only in Vercel environment variables and never prefix it with `PUBLIC_`.
+## GitHub Pages project-site deployment
 
-## Configure and test Buttondown
+The workflow at `.github/workflows/deploy-pages.yml` runs on pushes to `main` and can also be started manually. In the repository's Pages settings, select **GitHub Actions** as the source. By default, the workflow builds the project site with:
 
-1. Create or select a Buttondown newsletter and note its public username.
-2. Set `PUBLIC_BUTTONDOWN_USERNAME` to the username slug only, not a URL. The slug may contain letters, numbers, hyphens, and underscores. Configure it for Production in Vercel.
-3. For a local integration test, run:
+```dotenv
+PUBLIC_SITE_URL=https://<account>.github.io
+PUBLIC_BASE_PATH=/<repository-name>/
+```
 
-   ```bash
-   PUBLIC_BUTTONDOWN_USERNAME=your-buttondown-username PUBLIC_SITE_URL=http://localhost:4321 npm run dev
-   ```
+It runs `npm ci`, installs the Chromium test dependency, runs `npm run verify`, and uploads `dist/` only after verification succeeds. The deploy job then publishes that artifact. No remote deployment is needed to validate the local artifact.
 
-4. Submit a test address through the homepage form. Confirm the success message appears and the confirmation email arrives. Also test an invalid email and an offline or blocked request; the entered address must remain available for retry after a network failure.
-5. Replace any placeholder or `test` value before deployment.
+## Optional custom-domain configuration using repository variables `SITE_URL` and `BASE_PATH=/`
 
-## Configure Giscus comments
+After configuring the custom domain in GitHub Pages and its DNS, add these Actions repository variables under **Settings → Secrets and variables → Actions → Variables**:
 
-Giscus stores comments in GitHub Discussions. Before advertising comments:
+```dotenv
+SITE_URL=https://blog.example.com
+BASE_PATH=/
+```
 
-1. Make the GitHub repository public.
-2. Enable **Settings → General → Features → Discussions**.
-3. Install the Giscus GitHub app for the repository.
-4. Open [giscus.app](https://giscus.app), enter the repository, choose the Discussions category, and use pathname mapping.
-5. Copy the four generated identifiers into Vercel Production variables:
+`SITE_URL` must be the public HTTP(S) origin without a path, query, or fragment. `BASE_PATH=/` switches canonical URLs, assets, RSS, sitemap, and internal links from the repository subpath to the domain root. Run the root release command locally before publishing this configuration.
 
-   - `PUBLIC_GISCUS_REPO`: `owner/public-repository`
-   - `PUBLIC_GISCUS_REPO_ID`: repository ID generated by Giscus
-   - `PUBLIC_GISCUS_CATEGORY`: the enabled Discussions category name
-   - `PUBLIC_GISCUS_CATEGORY_ID`: category ID generated by Giscus
+## Rollback with `git revert`
 
-6. Deploy and open a published article. Confirm the Giscus frame loads and a test discussion can be created. Then block the Giscus request once in browser developer tools and confirm the article remains readable and the unavailable state is announced.
-
-Do not invent or hand-edit the repository and category IDs; copy them from the Giscus configuration output.
-
-## Deployment checklist and rollback
-
-Before a production deployment:
-
-- Confirm every new lab's commands and exact tested versions were reviewed before setting `draft: false`.
-- Confirm `PUBLIC_SITE_URL` is the production origin.
-- Replace the test Buttondown username with the real public username and submit the form once.
-- Confirm the GitHub repository is public, Discussions is enabled, the Giscus app is installed, and all four Giscus identifiers are configured.
-- Run `PUBLIC_BUTTONDOWN_USERNAME=test PUBLIC_SITE_URL=https://example.com npm run verify` with no failures.
-- Review the home, Articles, Learning paths, About, and article pages at mobile and desktop widths.
-- Confirm the footer says the site is personal and unofficial.
-- After deployment, smoke-test navigation, search, one article, RSS, the sitemap, newsletter submission, and comments.
-
-To roll back a bad source deployment, revert the offending commit instead of rewriting shared history:
+Undo a bad published commit without rewriting shared history:
 
 ```bash
 git log --oneline
 git revert <bad-commit-sha>
-git push origin <production-branch>
+git push origin main
 ```
 
-Vercel builds the revert commit and restores the previous source state. Watch the deployment finish, then repeat the production smoke test.
+The workflow verifies and deploys the revert. After it finishes, check the homepage, affected article, search, RSS, and sitemap at the public URL.

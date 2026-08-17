@@ -148,6 +148,19 @@ describe('publication boundaries and truthful content', () => {
 });
 
 describe('reviewed interface contracts', () => {
+  it('contains no removed deployment or integration instructions', async () => {
+    const files = ['README.md', 'package.json', '.env.example', 'astro.config.mjs'];
+    const text = (await Promise.all(files.map((file) => readFile(pathFromRoot(file), 'utf8')))).join('\n');
+    const removedTerms = [
+      ['ver', 'cel'],
+      ['button', 'down'],
+      ['gis', 'cus'],
+      ['learning', 'paths']
+    ].map((parts) => parts.join(''));
+
+    expect(text).not.toMatch(new RegExp(removedTerms.join('|'), 'i'));
+  });
+
   it('clearly labels draft cards and article metadata during development', () => {
     const postCard = source('src/components/PostCard.astro');
     const article = source('src/layouts/PostLayout.astro');

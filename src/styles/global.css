@@ -118,6 +118,10 @@ pre {
   width: min(100%, var(--reading-max));
 }
 
+.shell.reading-column {
+  width: min(calc(100% - 64px), var(--reading-max));
+}
+
 .section {
   padding-block: 64px;
 }
@@ -408,6 +412,10 @@ pre {
 @media (max-width: 47.99rem) {
   .shell {
     width: calc(100% - 32px);
+  }
+
+  .shell.reading-column {
+    width: min(calc(100% - 32px), var(--reading-max));
   }
 
   .section {
