@@ -84,15 +84,17 @@ test('breadcrumbs use the configured site base', async ({ page }) => {
     .toHaveAttribute('href', pagePath('/'));
 });
 
-test('home exposes exactly the three primary topic links', async ({ page }) => {
+test('home exposes the two Lightspeed and three MCP topic links', async ({ page }) => {
   await page.goto(pagePath('/'));
   const main = page.locator('main');
   const links = main.locator(`a[href^="${pagePath('/topics/')}"]`);
-  await expect(links).toHaveCount(3);
+  await expect(links).toHaveCount(5);
   for (const [name, href] of [
     ['OpenShift Lightspeed', '/topics/openshift-lightspeed/'],
     ['Agentic Lightspeed', '/topics/agentic-lightspeed/'],
-    ['MCP', '/topics/mcp/']
+    ['MCP Gateway', '/topics/mcp/#mcp-gateway'],
+    ['MCP Server', '/topics/mcp/#mcp-server'],
+    ['MCP Lifecycle Operator', '/topics/mcp/#mcp-lifecycle-operator']
   ] as const) {
     await expect(main.getByRole('link', { name, exact: true })).toHaveAttribute('href', pagePath(href));
   }
@@ -132,18 +134,23 @@ test('topic routes show a title and article list or empty state', async ({ page 
   for (const slug of ['openshift-lightspeed', 'agentic-lightspeed', 'mcp']) {
     await page.goto(pagePath(`/topics/${slug}/`));
     await expect(page.locator('h1')).toHaveCount(1);
-    await expect(page.locator('[data-topic-article-list], [data-topic-empty]')).toBeVisible();
+    await expect(page.locator(
+      '[data-topic-article-list], [data-topic-empty], [data-mcp-article-list], [data-mcp-empty]'
+    ).first()).toBeVisible();
   }
 });
 
 test('MCP navigation targets the three topic sections', async ({ page }) => {
   await page.goto(pagePath('/topics/mcp/'));
-  for (const [name, id] of [
-    ['MCP Gateway', 'mcp-gateway'],
-    ['MCP Server', 'mcp-server'],
-    ['MCP Lifecycle Operator', 'mcp-lifecycle-operator']
+  for (const [name, id, description] of [
+    ['MCP Gateway', 'mcp-gateway', 'Notes about MCP gateways on OpenShift.'],
+    ['MCP Server', 'mcp-server', 'Notes about MCP servers on OpenShift.'],
+    ['MCP Lifecycle Operator', 'mcp-lifecycle-operator', 'Notes about MCP Lifecycle Operator on OpenShift.']
   ] as const) {
-    await expect(page.locator(`#${id}`)).toContainText(name);
+    const section = page.locator(`#${id}`);
+    await expect(section.getByRole('heading', { name, exact: true })).toBeVisible();
+    await expect(section.getByText(description, { exact: true })).toBeVisible();
+    await expect(section.locator('[data-mcp-article-list], [data-mcp-empty]')).toBeVisible();
   }
 });
 

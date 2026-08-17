@@ -1,7 +1,13 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PostCard from '../components/PostCard.astro';
-import { mcpLabelConfig, siteConfig, topicConfig, withBase } from '../config/site';
+import {
+  mcpLabelConfig,
+  mcpTopicDescriptionConfig,
+  siteConfig,
+  topicConfig,
+  withBase
+} from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
 import { isPublished, sortNewest } from '../lib/posts';
 
@@ -9,8 +15,8 @@ const mode = import.meta.env.PROD ? 'production' : 'development';
 const posts = sortNewest(
   (await getPostCollection()).filter((post) => isPublished(post, mode))
 ).slice(0, 5);
-const topicEntries = Object.entries(topicConfig);
-const mcpLabels = Object.values(mcpLabelConfig).join(' · ');
+const topicEntries = Object.entries(topicConfig).filter(([slug]) => slug !== 'mcp');
+const mcpTopicEntries = Object.entries(mcpLabelConfig);
 ---
 
 <BaseLayout>
@@ -27,7 +33,13 @@ const mcpLabels = Object.values(mcpLabelConfig).join(' · ');
         {topicEntries.map(([slug, topic]) => (
           <li>
             <a href={withBase(`/topics/${slug}/`)}>{topic.label}</a>
-            <span>{slug === 'mcp' ? mcpLabels : topic.description}</span>
+            <span>{topic.description}</span>
+          </li>
+        ))}
+        {mcpTopicEntries.map(([slug, label]) => (
+          <li>
+            <a href={`${withBase('/topics/mcp/')}#${slug}`}>{label}</a>
+            <span>{mcpTopicDescriptionConfig[slug as keyof typeof mcpTopicDescriptionConfig]}</span>
           </li>
         ))}
       </ul>

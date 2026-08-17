@@ -30,6 +30,12 @@ export const mcpLabelConfig: Record<McpLabel, string> = {
   'mcp-lifecycle-operator': 'MCP Lifecycle Operator'
 };
 
+export const mcpTopicDescriptionConfig: Record<McpLabel, string> = {
+  'mcp-gateway': 'Notes about MCP gateways on OpenShift.',
+  'mcp-server': 'Notes about MCP servers on OpenShift.',
+  'mcp-lifecycle-operator': 'Notes about MCP Lifecycle Operator on OpenShift.'
+};
+
 export function withBase(path: string, base = import.meta.env.BASE_URL) {
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;
   const normalizedPath = path.replace(/^\/+/, '');
