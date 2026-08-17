@@ -2,7 +2,7 @@
 import type { Topic } from '../../content.config';
 import { topics } from '../../content.config';
 import PostCard from '../../components/PostCard.astro';
-import { mcpLabelConfig, topicConfig } from '../../config/site';
+import { mcpLabelConfig, topicConfig, withBase } from '../../config/site';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getPostCollection } from '../../lib/post-collection';
 import { isPublished, sortNewest } from '../../lib/posts';
@@ -26,17 +26,26 @@ const posts = sortNewest(
 ---
 
 <BaseLayout title={config.label} description={config.description}>
-  <header class="topic-header section">
-    <div class="shell reading-column">
-      <p class="kicker">Topic</p>
+  <article class="page-article topic-page">
+    <nav class="breadcrumb" aria-label="Breadcrumb"><a href={withBase('/')}>Home</a> / Topics</nav>
+    <header>
+      <p class="eyebrow">Topic</p>
       <h1>{config.label}</h1>
-      <p>{config.description}</p>
-      {topic === 'mcp' && <p>{Object.values(mcpLabelConfig).join(' · ')}</p>}
-    </div>
-  </header>
+      <p class="lead">{config.description}</p>
+    </header>
 
-  <section class="section section--bordered" aria-labelledby="topic-articles-title">
-    <div class="shell">
+    {topic === 'mcp' && (
+      <div class="mcp-sections">
+        {Object.entries(mcpLabelConfig).map(([slug, label]) => (
+          <section id={slug}>
+            <h2>{label}</h2>
+            <p>Notes about {label} will appear here as they are published.</p>
+          </section>
+        ))}
+      </div>
+    )}
+
+    <section aria-labelledby="topic-articles-title">
       <h2 id="topic-articles-title">Articles</h2>
       {posts.length > 0 ? (
         <div class="article-list" data-topic-article-list>
@@ -45,6 +54,6 @@ const posts = sortNewest(
       ) : (
         <p data-topic-empty>Articles are coming.</p>
       )}
-    </div>
-  </section>
+    </section>
+  </article>
 </BaseLayout>

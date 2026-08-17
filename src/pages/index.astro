@@ -14,30 +14,26 @@ const mcpLabels = Object.values(mcpLabelConfig).join(' · ');
 ---
 
 <BaseLayout>
-  <section class="home-intro section">
-    <div class="shell reading-column">
-      <p class="kicker">{siteConfig.subtitle}</p>
-      <h1>Learn by building.</h1>
-      <p class="home-intro__summary">Practical notes on OpenShift Lightspeed, agentic systems, and MCP.</p>
-    </div>
-  </section>
+  <article class="page-article home-page">
+    <header>
+      <p class="eyebrow">{siteConfig.subtitle}</p>
+      <h1>{siteConfig.title}</h1>
+      <p class="lead">Practical, follow-along notes on OpenShift Lightspeed, agentic systems, and MCP.</p>
+    </header>
 
-  <section class="section section--bordered" aria-labelledby="topics-title">
-    <div class="shell">
+    <section aria-labelledby="topics-title">
       <h2 id="topics-title">Topics</h2>
-      <div class="topic-list">
+      <ul class="topic-links">
         {topicEntries.map(([slug, topic]) => (
-          <article class="topic-row">
-            <h3><a href={withBase(`/topics/${slug}/`)}>{topic.label}</a></h3>
-            {slug === 'mcp' ? <p>— {mcpLabels}</p> : <p>{topic.description}</p>}
-          </article>
+          <li>
+            <a href={withBase(`/topics/${slug}/`)}>{topic.label}</a>
+            <span>{slug === 'mcp' ? mcpLabels : topic.description}</span>
+          </li>
         ))}
-      </div>
-    </div>
-  </section>
+      </ul>
+    </section>
 
-  <section class="section" aria-labelledby="newest-title">
-    <div class="shell">
+    <section aria-labelledby="newest-title">
       <h2 id="newest-title">Newest articles</h2>
       {posts.length > 0 ? (
         <div class="article-list">
@@ -46,6 +42,6 @@ const mcpLabels = Object.values(mcpLabelConfig).join(' · ');
       ) : (
         <p>Articles are coming.</p>
       )}
-    </div>
-  </section>
+    </section>
+  </article>
 </BaseLayout>

@@ -2,7 +2,7 @@
 import type { MarkdownHeading } from 'astro';
 import CodeCopy from '../components/CodeCopy.astro';
 import PostCard from '../components/PostCard.astro';
-import { mcpLabelConfig, topicConfig } from '../config/site';
+import { mcpLabelConfig, topicConfig, withBase } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
 import { getRelatedPosts, isPublished, type Post } from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
@@ -35,281 +35,66 @@ const formatDate = (date: Date) =>
   updatedDate={post.data.updatedDate}
   article
 >
-  <div class="shell article-shell">
-    <article class="article" data-pagefind-body>
-      <span data-pagefind-filter={`topic:${post.data.topic}`} hidden></span>
-      <span data-pagefind-filter={`difficulty:${post.data.difficulty}`} hidden></span>
+  {tableOfContents.length > 0 && (
+    <nav class="contents-nav" aria-label="On this page" slot="contents">
+      <h2>On this page</h2>
+      <ol>
+        {tableOfContents.map((heading) => (
+          <li class:list={{ 'contents-nav__nested': heading.depth === 3 }}>
+            <a href={`#${heading.slug}`}>{heading.text}</a>
+          </li>
+        ))}
+      </ol>
+    </nav>
+  )}
 
-      <header class="article-header reading-column">
-        <p class="article-topic" data-pagefind-meta="topic">{topic.label}</p>
-        {mcpLabels.length > 0 && (
-          <p class="article-mcp-labels" data-pagefind-meta="mcpLabels">{mcpLabels.join(' · ')}</p>
+  <nav class="breadcrumb" aria-label="Breadcrumb">
+    <a href={withBase('/')}>Home</a>
+    <span>/</span>
+    <a href={withBase(`/topics/${post.data.topic}/`)}>{topic.label}</a>
+  </nav>
+
+  <article class="article">
+    <header class="article-header">
+      <p class="eyebrow">{topic.label}{mcpLabels.length > 0 ? ` · ${mcpLabels.join(' · ')}` : ''}</p>
+      <h1>{post.data.title}</h1>
+      <p class="lead">{post.data.description}</p>
+      <p class="article-meta">
+        <span>{post.data.draft ? 'Draft preview' : post.data.kind === 'lab' ? 'Lab' : 'Guide'}</span>
+        <span>{post.data.difficulty}</span>
+        <span>{post.data.estimatedMinutes} minutes</span>
+        <time datetime={post.data.publishedDate.toISOString()}>{formatDate(post.data.publishedDate)}</time>
+      </p>
+    </header>
+
+    {(showEnvironment || showPrerequisites) && (
+      <div class="article-setup">
+        {showEnvironment && (
+          <section aria-labelledby="tested-versions-title">
+            <h2 id="tested-versions-title">Tested versions</h2>
+            <ul>{post.data.testedVersions.map((version) => <li>{version}</li>)}</ul>
+          </section>
         )}
-        <p class="article-kind">{post.data.draft ? 'Draft preview' : 'Field note'}</p>
-        <h1 data-pagefind-meta="title">{post.data.title}</h1>
-        <p class="article-summary" data-pagefind-meta="description">{post.data.description}</p>
-        <dl class="article-meta">
-          <div>
-            <dt>Type</dt>
-            <dd>{post.data.kind === 'lab' ? 'Lab' : 'Guide'}</dd>
-          </div>
-          <div>
-            <dt>Difficulty</dt>
-            <dd>{post.data.difficulty}</dd>
-          </div>
-          <div>
-            <dt>Time</dt>
-            <dd>{post.data.estimatedMinutes} minutes</dd>
-          </div>
-          <div>
-            <dt>{post.data.draft ? 'Draft date' : 'Published'}</dt>
-            <dd>
-              <time datetime={post.data.publishedDate.toISOString()} data-pagefind-meta="date">
-                {formatDate(post.data.publishedDate)}
-              </time>
-            </dd>
-          </div>
-          {post.data.updatedDate && (
-            <div>
-              <dt>Updated</dt>
-              <dd><time datetime={post.data.updatedDate.toISOString()}>{formatDate(post.data.updatedDate)}</time></dd>
-            </div>
-          )}
-        </dl>
-      </header>
-
-      {(showEnvironment || showPrerequisites) && (
-        <div class="article-setup reading-column">
-          {showEnvironment && (
-            <section aria-labelledby="tested-versions-title">
-              <h2 id="tested-versions-title">Tested versions</h2>
-              <ul>
-                {post.data.testedVersions.map((version) => <li>{version}</li>)}
-              </ul>
-            </section>
-          )}
-          {showPrerequisites && (
-            <section aria-labelledby="prerequisites-title">
-              <h2 id="prerequisites-title">Prerequisites</h2>
-              <ul>
-                {post.data.prerequisites.map((prerequisite) => <li>{prerequisite}</li>)}
-              </ul>
-            </section>
-          )}
-        </div>
-      )}
-
-      <div class="article-reading reading-column">
-        {tableOfContents.length > 0 && (
-          <nav class="article-toc" aria-labelledby="table-of-contents-title">
-            <h2 id="table-of-contents-title">Contents</h2>
-            <ol>
-              {tableOfContents.map((heading) => (
-                <li class:list={{ 'article-toc__nested': heading.depth === 3 }}>
-                  <a href={`#${heading.slug}`}>{heading.text}</a>
-                </li>
-              ))}
-            </ol>
-          </nav>
+        {showPrerequisites && (
+          <section aria-labelledby="prerequisites-title">
+            <h2 id="prerequisites-title">Prerequisites</h2>
+            <ul>{post.data.prerequisites.map((prerequisite) => <li>{prerequisite}</li>)}</ul>
+          </section>
         )}
-        <div class="article-prose prose">
-          <slot />
-        </div>
       </div>
-    </article>
-
-    {relatedPosts.length > 0 && (
-      <section class="related-posts reading-column" aria-labelledby="related-posts-title">
-        <h2 id="related-posts-title">Related articles</h2>
-        <div class="article-list">
-          {relatedPosts.map((relatedPost) => <PostCard post={relatedPost} />)}
-        </div>
-      </section>
     )}
 
-    <CodeCopy />
-  </div>
+    <div class="article-prose prose">
+      <slot />
+    </div>
+  </article>
+
+  {relatedPosts.length > 0 && (
+    <section class="related-posts" aria-labelledby="related-posts-title">
+      <h2 id="related-posts-title">Related articles</h2>
+      <div class="article-list">{relatedPosts.map((relatedPost) => <PostCard post={relatedPost} />)}</div>
+    </section>
+  )}
+
+  <CodeCopy />
 </BaseLayout>
-
-<style is:global>
-  .article-shell {
-    padding-block: 64px;
-  }
-
-  .article-header,
-  .article-setup,
-  .article-reading,
-  .related-posts {
-    margin-inline: auto;
-  }
-
-  .article-header {
-    padding-bottom: 40px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .article-topic,
-  .article-mcp-labels,
-  .article-kind {
-    margin: 0;
-    color: var(--text-secondary);
-    font-size: 0.9rem;
-    font-weight: 700;
-  }
-
-  .article-mcp-labels,
-  .article-kind {
-    margin-top: 0.35rem;
-  }
-
-  .article-header h1 {
-    margin-top: 1.5rem;
-  }
-
-  .article-summary {
-    margin: 1.25rem 0 0;
-    color: var(--text-secondary);
-    font-size: clamp(1.125rem, 2.5vw, 1.375rem);
-  }
-
-  .article-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1rem 2rem;
-    margin: 2rem 0 0;
-  }
-
-  .article-meta div {
-    display: grid;
-    gap: 0.2rem;
-  }
-
-  .article-meta dt {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    font-weight: 700;
-  }
-
-  .article-meta dd {
-    margin: 0;
-  }
-
-  .article-setup {
-    display: grid;
-    gap: 2rem;
-    padding-block: 40px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .article-setup section + section {
-    padding-top: 2rem;
-    border-top: 1px solid var(--border);
-  }
-
-  .article-setup h2,
-  .article-toc h2 {
-    margin-bottom: 1rem;
-    font-size: 1.5rem;
-  }
-
-  .article-setup ul {
-    display: grid;
-    gap: 0.5rem;
-    margin: 0;
-    padding-left: 1.25rem;
-  }
-
-  .article-reading {
-    padding-top: 40px;
-  }
-
-  .article-toc {
-    margin-bottom: 40px;
-    padding: 1.5rem;
-    border-left: 4px solid var(--rh-red);
-    background: var(--surface-subtle);
-  }
-
-  .article-toc ol {
-    display: grid;
-    gap: 0.5rem;
-    margin: 0;
-    padding-left: 1.25rem;
-  }
-
-  .article-toc__nested {
-    margin-left: 1rem;
-  }
-
-  .article-prose {
-    width: 100%;
-    margin: 0;
-    overflow-wrap: anywhere;
-  }
-
-  .article-prose > :first-child {
-    margin-top: 0;
-  }
-
-  .article-prose h2 {
-    margin: 3.5rem 0 1rem;
-  }
-
-  .article-prose h3 {
-    margin: 2.5rem 0 0.75rem;
-  }
-
-  .article-prose p,
-  .article-prose li {
-    color: var(--text-primary);
-  }
-
-  .article-prose blockquote {
-    margin: 2rem 0;
-    padding: 1rem 1.25rem;
-    border-left: 4px solid var(--rh-red);
-    background: var(--surface-subtle);
-  }
-
-  .article-prose blockquote > :first-child {
-    margin-top: 0;
-  }
-
-  .article-prose blockquote > :last-child {
-    margin-bottom: 0;
-  }
-
-  .article-prose :not(pre) > code {
-    overflow-wrap: anywhere;
-  }
-
-  .article-prose pre {
-    min-width: 0;
-    width: 100%;
-    overflow-wrap: normal;
-  }
-
-  .article-prose pre code {
-    overflow-wrap: normal;
-    word-break: normal;
-  }
-
-  .related-posts {
-    padding-top: 64px;
-  }
-
-  @media (max-width: 47.99rem) {
-    .article-shell {
-      padding-block: 40px;
-    }
-
-    .article-meta {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .related-posts {
-      padding-top: 40px;
-    }
-  }
-</style>

@@ -1,92 +1,11 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 import { resolveBasePath } from '../src/config/site-url.mjs';
 
 const root = new URL('../', import.meta.url);
 const pathFromRoot = (relativePath: string) => new URL(relativePath, root);
 const source = (relativePath: string) => readFileSync(pathFromRoot(relativePath), 'utf8');
-
-describe('GitHub Pages deployment artifact', () => {
-  it.each([
-    ['root output', '/', ''],
-    ['repository-subpath output', '/ai-runs-here/', 'ai-runs-here']
-  ])('locates %s and writes Pagefind next to the built site root', async (_name, basePath, siteSegment) => {
-    const scriptUrl = pathFromRoot('scripts/build-pagefind.mjs');
-    const { buildArticleSearchIndex, resolveArticleUrl, resolvePagefindPaths } = await import(scriptUrl.href);
-    const directory = await mkdtemp(join(tmpdir(), 'pagefind-paths-'));
-    const distDirectory = join(directory, 'dist');
-    const siteDirectory = siteSegment ? join(distDirectory, siteSegment) : distDirectory;
-    await mkdir(join(siteDirectory, 'articles', 'published-post'), { recursive: true });
-    await writeFile(
-      join(siteDirectory, 'articles', 'published-post', 'index.html'),
-      '<html lang="en"><body><article data-pagefind-body>Published article</article></body></html>'
-    );
-    const articleFile = join(siteDirectory, 'articles', 'published-post', 'index.html');
-
-    expect(resolvePagefindPaths({ distDirectory, basePath })).toEqual({
-      siteDirectory,
-      outputDirectory: join(siteDirectory, 'pagefind'),
-      articleDirectory: join(siteDirectory, 'articles'),
-      urlPrefix: basePath
-    });
-    expect(resolveArticleUrl({ siteDirectory, articleFile, basePath })).toBe(
-      `${basePath}articles/published-post/`
-    );
-    expect(await buildArticleSearchIndex({ distDirectory, basePath })).toBe(1);
-    expect(existsSync(join(siteDirectory, 'pagefind', 'pagefind.js'))).toBe(true);
-  });
-
-  it('locates an empty repository-subpath output from its site entry point', async () => {
-    const { resolvePagefindPaths } = await import(pathFromRoot('scripts/build-pagefind.mjs').href);
-    const directory = await mkdtemp(join(tmpdir(), 'pagefind-empty-paths-'));
-    const distDirectory = join(directory, 'dist');
-    const siteDirectory = join(distDirectory, 'ai-runs-here');
-    await mkdir(siteDirectory, { recursive: true });
-    await writeFile(join(siteDirectory, 'index.html'), '<html lang="en"><body>Empty site</body></html>');
-
-    expect(resolvePagefindPaths({ distDirectory, basePath: '/ai-runs-here/' }).siteDirectory)
-      .toBe(siteDirectory);
-  });
-
-  it('indexes only article detail routes and still writes an empty article index', async () => {
-    const scriptUrl = pathFromRoot('scripts/build-pagefind.mjs');
-    expect(existsSync(scriptUrl), 'the scoped Pagefind build script should exist').toBe(true);
-    if (!existsSync(scriptUrl)) return;
-
-    const { buildArticleSearchIndex } = await import(scriptUrl.href);
-    const directory = await mkdtemp(join(tmpdir(), 'pagefind-scope-'));
-    const siteDirectory = join(directory, 'dist');
-    const outputDirectory = join(siteDirectory, 'pagefind');
-    await mkdir(join(siteDirectory, 'articles', 'published-post'), { recursive: true });
-    await mkdir(join(siteDirectory, 'about'), { recursive: true });
-    await writeFile(
-      join(siteDirectory, 'articles', 'published-post', 'index.html'),
-      '<html lang="en"><body><article data-pagefind-body>Published article</article></body></html>'
-    );
-    await writeFile(
-      join(siteDirectory, 'about', 'index.html'),
-      '<html lang="en"><body>About page must not be indexed</body></html>'
-    );
-
-    expect(await buildArticleSearchIndex({ siteDirectory, outputDirectory })).toBe(1);
-    expect(JSON.parse(await readFile(join(outputDirectory, 'pagefind-entry.json'), 'utf8')))
-      .toMatchObject({ languages: { en: { page_count: 1 } } });
-
-    const emptyDirectory = await mkdtemp(join(tmpdir(), 'pagefind-empty-scope-'));
-    const emptySite = join(emptyDirectory, 'dist');
-    const emptyOutput = join(emptySite, 'pagefind');
-    await mkdir(join(emptySite, 'about'), { recursive: true });
-    await writeFile(join(emptySite, 'about', 'index.html'), '<html><body>About only</body></html>');
-
-    expect(await buildArticleSearchIndex({ siteDirectory: emptySite, outputDirectory: emptyOutput })).toBe(0);
-    expect(JSON.parse(await readFile(join(emptyOutput, 'pagefind-entry.json'), 'utf8')))
-      .toMatchObject({ languages: {} });
-    expect(existsSync(join(emptyOutput, 'pagefind.js'))).toBe(true);
-  });
-});
 
 describe('GitHub Pages base path', () => {
   it.each([
@@ -161,16 +80,6 @@ describe('reviewed interface contracts', () => {
     expect(text).not.toMatch(new RegExp(removedTerms.join('|'), 'i'));
   });
 
-  it('clearly labels draft cards and article metadata during development', () => {
-    const postCard = source('src/components/PostCard.astro');
-    const article = source('src/layouts/PostLayout.astro');
-
-    expect(postCard).toContain('post.data.draft');
-    expect(postCard).toContain('Draft preview');
-    expect(article).toContain("post.data.draft ? 'Draft preview' : 'Field note'");
-    expect(article).toContain("post.data.draft ? 'Draft date' : 'Published'");
-    expect(article).toContain('publishedDate={post.data.draft ? undefined : post.data.publishedDate}');
-  });
   it('identifies Li and the approved professional focus on the About page', () => {
     const about = source('src/pages/about.astro');
 

@@ -1,6 +1,6 @@
 ---
 import PostCard from '../../components/PostCard.astro';
-import SearchPanel from '../../components/SearchPanel.astro';
+import { withBase } from '../../config/site';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getPostCollection } from '../../lib/post-collection';
 import { isPublished, sortNewest } from '../../lib/posts';
@@ -13,20 +13,18 @@ const posts = sortNewest(
 
 <BaseLayout
   title="Articles"
-  description="Search practical Applied AI articles or browse them by publication date."
+  description="Practical Applied AI articles in publication order."
 >
-  <div class="shell articles-page">
-    <header class="articles-page__header reading-column">
+  <article class="page-article articles-page">
+    <header>
+      <p class="breadcrumb"><a href={withBase('/')}>Home</a> / Articles</p>
       <h1>Articles</h1>
       <p>
         {mode === 'development'
-          ? 'Search articles and clearly marked draft previews, or browse the newest writing first.'
-          : 'Search practical articles, or browse the newest writing first.'}
+          ? 'Published notes and clearly marked draft previews, newest first.'
+          : 'Practical notes, newest first.'}
       </p>
     </header>
-
-    <SearchPanel />
-
     <section data-static-article-list aria-labelledby="all-articles-title">
       <div class="articles-page__list-heading">
         <h2 id="all-articles-title">All articles</h2>
@@ -40,43 +38,5 @@ const posts = sortNewest(
         <p>No published articles yet. Check back soon.</p>
       )}
     </section>
-  </div>
+  </article>
 </BaseLayout>
-
-<style>
-  .articles-page {
-    display: grid;
-    gap: 64px;
-    padding-block: 64px;
-  }
-
-  .articles-page__header p {
-    max-width: 42rem;
-    margin: 1rem 0 0;
-    color: var(--text-secondary);
-    font-size: 1.125rem;
-  }
-
-  .articles-page__list-heading {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-  }
-
-  .articles-page__list-heading h2,
-  .articles-page__list-heading p {
-    margin: 0 0 1rem;
-  }
-
-  .articles-page__list-heading p {
-    color: var(--text-secondary);
-  }
-
-  @media (max-width: 47.99rem) {
-    .articles-page {
-      gap: 40px;
-      padding-block: 40px;
-    }
-  }
-</style>

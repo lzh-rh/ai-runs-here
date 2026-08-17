@@ -82,7 +82,7 @@ Edit the existing file. Keep `publishedDate`, add or refresh `updatedDate`, reru
 
 ### Return to draft
 
-Set `draft: true`, verify, commit, and push. The next production build removes the post from its route, listings, search, RSS, and sitemap. Previously published or cached copies may still exist elsewhere.
+Set `draft: true`, verify, commit, and push. The next production build removes the post from its route, listings, RSS, and sitemap. Previously published or cached copies may still exist elsewhere.
 
 ### Delete
 
@@ -103,7 +103,7 @@ PUBLIC_SITE_URL=https://blog.example.com PUBLIC_BASE_PATH=/ PLAYWRIGHT_BASE_PATH
 PUBLIC_SITE_URL=https://example.github.io PUBLIC_BASE_PATH=/ai-runs-here/ PLAYWRIGHT_BASE_PATH=/ai-runs-here/ npm run verify
 ```
 
-Each command runs unit tests, Astro checks, the static build, article-only Pagefind indexing, internal-link checks, and browser tests. The browser suite checks navigation, search, drafts, RSS, sitemap, accessibility, and responsive overflow.
+Each command runs unit tests, Astro checks, the static build, internal-link checks, and browser tests. The browser suite checks navigation, articles, drafts, RSS, sitemap, accessibility, and responsive overflow.
 
 ## GitHub Pages project-site deployment
 
@@ -137,4 +137,4 @@ git revert <bad-commit-sha>
 git push origin main
 ```
 
-The workflow verifies and deploys the revert. After it finishes, check the homepage, affected article, search, RSS, and sitemap at the public URL.
+The workflow verifies and deploys the revert. After it finishes, check the homepage, affected article, RSS, and sitemap at the public URL.
