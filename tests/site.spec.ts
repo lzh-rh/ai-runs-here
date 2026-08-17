@@ -14,13 +14,40 @@ test('production excludes draft articles and draft-preview badges', async ({ pag
   await expect(page.getByText('Draft preview')).toHaveCount(0);
 });
 
-test('home omits removed integrations, learning paths, terminal status, and card grids', async ({ page }) => {
+test('home exposes exactly the three primary topic links', async ({ page }) => {
+  await page.goto('/');
+  const main = page.locator('main');
+  await expect(main.getByRole('link', { name: 'OpenShift Lightspeed' })).toBeVisible();
+  await expect(main.getByRole('link', { name: 'Agentic Lightspeed' })).toBeVisible();
+  await expect(main.getByRole('link', { name: 'MCP' })).toBeVisible();
+  await expect(page.getByText('Learning paths')).toHaveCount(0);
+  await expect(page.getByText(/newsletter/i)).toHaveCount(0);
+});
+
+test('every topic route has a title and article or empty state', async ({ page }) => {
+  for (const slug of ['openshift-lightspeed', 'agentic-lightspeed', 'mcp']) {
+    await page.goto(`/topics/${slug}/`);
+    await expect(page.locator('h1')).toHaveCount(1);
+    await expect(page.locator('[data-topic-article-list], [data-topic-empty]')).toBeVisible();
+  }
+});
+
+test('site identifies itself as personal and unofficial', async ({ page }) => {
+  await page.goto('/about/');
+  await expect(page.getByText(/Li is a Technical Marketing Manager focused on Applied AI in OpenShift/i)).toBeVisible();
+  await expect(page.getByText(/not an official Red Hat website/i)).toBeVisible();
+});
+
+test('mobile navigation reports and closes its expanded state', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
   await page.goto('/');
 
-  await expect(page.getByText('Lab notes by email')).toHaveCount(0);
-  await expect(page.getByText('Current bench note')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'Learning paths' })).toHaveCount(0);
-  await expect(page.locator('.post-grid')).toHaveCount(0);
+  const menuButton = page.getByRole('button', { name: 'Menu' });
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+  await menuButton.click();
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Escape');
+  await expect(menuButton).toHaveAttribute('aria-expanded', 'false');
 });
 
 test('clearing every search control restores the published article list', async ({ page }) => {
@@ -49,14 +76,14 @@ test('search finds the published reading guide and filters by difficulty', async
 test('topic, difficulty, and combined filters return articles without a text query', async ({ page }) => {
   await page.goto('/articles/');
 
-  await page.getByLabel('Topic').selectOption('openshift-ai');
+  await page.getByLabel('Topic').selectOption('openshift-lightspeed');
   await expect(page.getByText('1 article found.')).toBeVisible();
   await expect(page.getByRole('link', { name: /Start learning Applied AI/ })).toBeVisible();
 
   await page.getByLabel('Difficulty').selectOption('beginner');
   await expect(page.getByText('1 article found.')).toBeVisible();
 
-  await page.getByLabel('Topic').selectOption('lightspeed');
+  await page.getByLabel('Topic').selectOption('agentic-lightspeed');
   await expect(page.getByText('0 articles found.')).toBeVisible();
 });
 
@@ -67,15 +94,15 @@ test('empty result gives useful recovery guidance', async ({ page }) => {
 });
 
 test('topic query preselects the filter and filter changes update the URL', async ({ page }) => {
-  await page.goto('/articles/?topic=openshift-ai');
-  await expect(page.getByLabel('Topic')).toHaveValue('openshift-ai');
-  await page.getByLabel('Topic').selectOption('lightspeed');
-  await expect(page).toHaveURL(/topic=lightspeed/);
+  await page.goto('/articles/?topic=openshift-lightspeed');
+  await expect(page.getByLabel('Topic')).toHaveValue('openshift-lightspeed');
+  await page.getByLabel('Topic').selectOption('agentic-lightspeed');
+  await expect(page).toHaveURL(/topic=agentic-lightspeed/);
 });
 
 test('difficulty query state survives direct load, reload, and back-forward navigation', async ({ page }) => {
-  await page.goto('/articles/?topic=openshift-ai&difficulty=beginner');
-  await expect(page.getByLabel('Topic')).toHaveValue('openshift-ai');
+  await page.goto('/articles/?topic=openshift-lightspeed&difficulty=beginner');
+  await expect(page.getByLabel('Topic')).toHaveValue('openshift-lightspeed');
   await expect(page.getByLabel('Difficulty')).toHaveValue('beginner');
   await expect(page.getByText('1 article found.')).toBeVisible();
 

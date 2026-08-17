@@ -3,7 +3,7 @@ import type { McpLabel, Topic } from '../content.config';
 export const siteConfig = {
   title: 'AI Runs Here',
   subtitle: 'Applied AI on OpenShift',
-  description: 'Tested labs, useful diagrams, and honest notes from the terminal.',
+  description: 'Practical notes on OpenShift Lightspeed, agentic systems, and MCP.',
   navigation: [
     { label: 'Articles', href: '/articles/' },
     { label: 'About', href: '/about/' }
@@ -30,3 +30,9 @@ export const mcpLabelConfig: Record<McpLabel, string> = {
   'mcp-server': 'MCP Server',
   'mcp-lifecycle-operator': 'MCP Lifecycle Operator'
 };
+
+export function withBase(path: string, base = import.meta.env.BASE_URL) {
+  const normalizedBase = base.endsWith('/') ? base : `${base}/`;
+  const normalizedPath = path.replace(/^\/+/, '');
+  return `${normalizedBase}${normalizedPath}`.replace(/\/{2,}/g, '/');
+}

@@ -1,0 +1,50 @@
+---
+import type { Topic } from '../../content.config';
+import { topics } from '../../content.config';
+import PostCard from '../../components/PostCard.astro';
+import { mcpLabelConfig, topicConfig } from '../../config/site';
+import BaseLayout from '../../layouts/BaseLayout.astro';
+import { getPostCollection } from '../../lib/post-collection';
+import { isPublished, sortNewest } from '../../lib/posts';
+
+export function getStaticPaths() {
+  return topics.map((topic) => ({ params: { topic }, props: { topic } }));
+}
+
+interface Props {
+  topic: Topic;
+}
+
+const { topic } = Astro.props;
+const config = topicConfig[topic];
+const mode = import.meta.env.PROD ? 'production' : 'development';
+const posts = sortNewest(
+  (await getPostCollection()).filter(
+    (post) => post.data.topic === topic && isPublished(post, mode)
+  )
+);
+---
+
+<BaseLayout title={config.label} description={config.description}>
+  <header class="topic-header section">
+    <div class="shell reading-column">
+      <p class="kicker">Topic</p>
+      <h1>{config.label}</h1>
+      <p>{config.description}</p>
+      {topic === 'mcp' && <p>{Object.values(mcpLabelConfig).join(' · ')}</p>}
+    </div>
+  </header>
+
+  <section class="section section--bordered" aria-labelledby="topic-articles-title">
+    <div class="shell">
+      <h2 id="topic-articles-title">Articles</h2>
+      {posts.length > 0 ? (
+        <div class="article-list" data-topic-article-list>
+          {posts.map((post) => <PostCard post={post} />)}
+        </div>
+      ) : (
+        <p data-topic-empty>Articles are coming.</p>
+      )}
+    </div>
+  </section>
+</BaseLayout>

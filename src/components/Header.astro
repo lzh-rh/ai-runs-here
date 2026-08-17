@@ -1,20 +1,72 @@
 ---
-import { siteConfig } from '../config/site';
+import { siteConfig, topicConfig, withBase } from '../config/site';
 
 const currentPath = Astro.url.pathname;
-const isCurrent = (href: string) => (href === '/' ? currentPath === href : currentPath.startsWith(href));
+const links = [
+  ...Object.entries(topicConfig).map(([slug, topic]) => ({
+    label: topic.label,
+    href: withBase(`/topics/${slug}/`)
+  })),
+  { label: 'Articles / Search', href: withBase('/articles/') },
+  { label: 'About', href: withBase('/about/') }
+];
+const homeHref = withBase('/');
+const isCurrent = (href: string) =>
+  href === homeHref ? currentPath === href : currentPath.startsWith(href);
 ---
 
 <header class="site-header">
   <nav class="site-nav shell" aria-label="Primary navigation">
-    <a class="site-brand" href="/" aria-label={`${siteConfig.title} home`}>
-      <span class="site-brand__mark" aria-hidden="true">AI</span>
-      <span class="site-brand__name">{siteConfig.title}</span>
-    </a>
-    <ul class="site-nav__links">
-      {siteConfig.navigation.map((item) => (
-        <li><a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{item.label}</a></li>
+    <div class="site-nav__bar">
+      <a class="site-brand" href={homeHref} aria-label={`${siteConfig.title} home`}>
+        <span class="site-brand__mark" aria-hidden="true"></span>
+        <span>{siteConfig.title}</span>
+      </a>
+      <button
+        class="site-nav__toggle"
+        type="button"
+        aria-expanded="false"
+        aria-controls="primary-menu"
+        data-nav-toggle
+        hidden
+      >Menu</button>
+    </div>
+    <ul class="site-nav__links" id="primary-menu" data-nav-menu>
+      {links.map((item) => (
+        <li>
+          <a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{item.label}</a>
+        </li>
       ))}
     </ul>
   </nav>
 </header>
+
+<script is:inline>
+  (() => {
+    const button = document.querySelector('[data-nav-toggle]');
+    const menu = document.querySelector('[data-nav-menu]');
+    if (!(button instanceof HTMLButtonElement) || !(menu instanceof HTMLElement)) return;
+
+    const closeMenu = (returnFocus = false) => {
+      button.setAttribute('aria-expanded', 'false');
+      menu.dataset.open = 'false';
+      if (returnFocus) button.focus();
+    };
+
+    button.hidden = false;
+    closeMenu();
+    button.addEventListener('click', () => {
+      const willOpen = button.getAttribute('aria-expanded') !== 'true';
+      button.setAttribute('aria-expanded', String(willOpen));
+      menu.dataset.open = String(willOpen);
+    });
+    menu.addEventListener('click', (event) => {
+      if (event.target instanceof HTMLAnchorElement) closeMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && button.getAttribute('aria-expanded') === 'true') {
+        closeMenu(true);
+      }
+    });
+  })();
+</script>

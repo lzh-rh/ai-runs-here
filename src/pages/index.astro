@@ -1,42 +1,51 @@
 ---
 import BaseLayout from '../layouts/BaseLayout.astro';
 import PostCard from '../components/PostCard.astro';
-import TopicRail from '../components/TopicRail.astro';
-import { siteConfig } from '../config/site';
+import { mcpLabelConfig, siteConfig, topicConfig, withBase } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
-import { getFeaturedPost, isPublished, sortNewest } from '../lib/posts';
+import { isPublished, sortNewest } from '../lib/posts';
 
 const mode = import.meta.env.PROD ? 'production' : 'development';
-const posts = (await getPostCollection()).filter((post) => isPublished(post, mode));
-const featuredPost = getFeaturedPost(posts);
-const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?.id).slice(0, 4);
+const posts = sortNewest(
+  (await getPostCollection()).filter((post) => isPublished(post, mode))
+).slice(0, 5);
+const topicEntries = Object.entries(topicConfig);
+const mcpLabels = Object.values(mcpLabelConfig).join(' · ');
 ---
 
 <BaseLayout>
-  <div class="shell">
-    <section class="hero" aria-labelledby="home-title">
-      <div class="hero__main">
-        <p class="eyebrow">Applied AI on OpenShift · Field notes 001–∞</p>
-        <h1 class="display hero__title" id="home-title">Applied AI, step by step.</h1>
-        <p class="hero__promise">{siteConfig.description}</p>
-      </div>
-    </section>
+  <section class="home-intro section">
+    <div class="shell reading-column">
+      <p class="kicker">{siteConfig.subtitle}</p>
+      <h1>Learn by building.</h1>
+      <p class="home-intro__summary">Practical notes on OpenShift Lightspeed, agentic systems, and MCP.</p>
+    </div>
+  </section>
 
-    <TopicRail />
-
-    <section class="section-block" aria-labelledby="field-notes-title">
-      <div class="section-heading">
-        <h2 id="field-notes-title">Field notes from the workbench</h2>
-        <p>Practical walkthroughs and explanations that separate observed results from the next thing to test.</p>
+  <section class="section section--bordered" aria-labelledby="topics-title">
+    <div class="shell">
+      <h2 id="topics-title">Topics</h2>
+      <div class="topic-list">
+        {topicEntries.map(([slug, topic]) => (
+          <article class="topic-row">
+            <h3><a href={withBase(`/topics/${slug}/`)}>{topic.label}</a></h3>
+            {slug === 'mcp' ? <p>— {mcpLabels}</p> : <p>{topic.description}</p>}
+          </article>
+        ))}
       </div>
-      {featuredPost ? (
-        <section class="article-list" aria-label="Featured and recent field notes">
-          <PostCard post={featuredPost} featured />
-          {recentPosts.map((post) => <PostCard post={post} />)}
-        </section>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="newest-title">
+    <div class="shell">
+      <h2 id="newest-title">Newest articles</h2>
+      {posts.length > 0 ? (
+        <div class="article-list">
+          {posts.map((post) => <PostCard post={post} />)}
+        </div>
       ) : (
-        <p>No published field notes yet. The first lab is still on the workbench.</p>
+        <p>Articles are coming.</p>
       )}
-    </section>
-  </div>
+    </div>
+  </section>
 </BaseLayout>

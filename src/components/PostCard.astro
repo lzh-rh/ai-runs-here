@@ -1,27 +1,36 @@
 ---
 import type { Post } from '../lib/posts';
-import { topicConfig } from '../config/site';
+import { mcpLabelConfig, topicConfig, withBase } from '../config/site';
 
 interface Props {
   post: Post;
-  featured?: boolean;
 }
 
-const { post, featured = false } = Astro.props;
+const { post } = Astro.props;
 const topic = topicConfig[post.data.topic];
 const kind = post.data.kind === 'lab' ? 'Lab' : 'Guide';
-const difficulty = post.data.difficulty.charAt(0).toUpperCase() + post.data.difficulty.slice(1);
+const date = post.data.updatedDate ?? post.data.publishedDate;
+const formattedDate = new Intl.DateTimeFormat('en', {
+  dateStyle: 'medium',
+  timeZone: 'UTC'
+}).format(date);
 ---
 
-<article class:list={['post-card', { 'post-card--featured': featured }]}>
-  <div class="post-card__meta">
-    {post.data.draft && <span class="post-card__draft">Draft preview</span>}
-    <span class="post-card__topic">{topic.label}</span>
-    <span>{kind}</span>
-    <span>{difficulty}</span>
-    <span>{post.data.estimatedMinutes} min</span>
+<article class="post-row">
+  <div class="post-row__body">
+    <p class="post-row__meta">
+      {post.data.draft && <span>Draft preview</span>}
+      <span>{topic.label}</span>
+      <span>{kind}</span>
+      <span>{post.data.estimatedMinutes} min</span>
+      <time datetime={date.toISOString()}>{formattedDate}</time>
+    </p>
+    <h3><a href={withBase(`/articles/${post.id}/`)}>{post.data.title}</a></h3>
+    <p>{post.data.description}</p>
+    {post.data.mcpLabels.length > 0 && (
+      <p class="post-row__labels">
+        {post.data.mcpLabels.map((label) => mcpLabelConfig[label]).join(' · ')}
+      </p>
+    )}
   </div>
-  <h3 class="post-card__title"><a href={`/articles/${post.id}/`}>{post.data.title}</a></h3>
-  <p class="post-card__description">{post.data.description}</p>
-  <span class="post-card__arrow" aria-hidden="true">↗</span>
 </article>

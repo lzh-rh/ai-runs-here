@@ -1,7 +1,7 @@
 ---
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
-import { siteConfig } from '../config/site';
+import { siteConfig, withBase } from '../config/site';
 import '../styles/global.css';
 
 interface Props {
@@ -23,7 +23,9 @@ const {
 } = Astro.props;
 const pageTitle = title ? `${title} · ${siteConfig.title}` : `${siteConfig.title} — ${siteConfig.subtitle}`;
 const canonical = new URL(Astro.url.pathname, Astro.site);
-const socialImage = image ? new URL(image, Astro.site) : new URL('/social-default.svg', Astro.site);
+const socialImage = image
+  ? new URL(withBase(image), Astro.site)
+  : new URL(withBase('/social-default.svg'), Astro.site);
 ---
 
 <!doctype html>
@@ -32,9 +34,9 @@ const socialImage = image ? new URL(image, Astro.site) : new URL('/social-defaul
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width" />
     <meta name="description" content={description} />
-    <meta name="theme-color" content="#143e33" />
+    <meta name="theme-color" content="#ffffff" />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" type="application/rss+xml" title={siteConfig.title} href="/rss.xml" />
+    <link rel="alternate" type="application/rss+xml" title={siteConfig.title} href={withBase('/rss.xml')} />
     <meta property="og:type" content={article ? 'article' : 'website'} />
     <meta property="og:title" content={pageTitle} />
     <meta property="og:description" content={description} />
