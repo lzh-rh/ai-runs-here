@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getPathNeighbors, isPublished, sortNewest, validateLearningPathOrders } from './posts';
+import { getRelatedPosts, isPublished, sortNewest } from './posts';
 
 const post = (id: string, overrides: Record<string, unknown> = {}) => ({
   id,
@@ -8,6 +8,7 @@ const post = (id: string, overrides: Record<string, unknown> = {}) => ({
     description: `A complete description for ${id}`,
     publishedDate: new Date('2026-01-01'),
     topic: 'mcp',
+    mcpLabels: [],
     tags: [],
     difficulty: 'beginner',
     estimatedMinutes: 10,
@@ -32,26 +33,21 @@ describe('post queries', () => {
     expect(sortNewest([older, newer]).map((item) => item.id)).toEqual(['newer', 'older']);
   });
 
-  it('returns ordered neighbors only within the same path', () => {
-    const first = post('first', { learningPath: { id: 'mcp', order: 1 } });
-    const second = post('second', { learningPath: { id: 'mcp', order: 2 } });
-    const third = post('third', { learningPath: { id: 'mcp', order: 3 } });
-    expect(getPathNeighbors([third, first, second], 'second')).toEqual({ previous: first, next: third });
+  it('returns newest posts with the current post topic', () => {
+    const current = post('current', { topic: 'mcp' });
+    const olderMatch = post('older-match', { topic: 'mcp', publishedDate: new Date('2026-02-01') });
+    const newestMatch = post('newest-match', { topic: 'mcp', publishedDate: new Date('2026-03-01') });
+    const otherTopic = post('other-topic', { topic: 'agentic-lightspeed', publishedDate: new Date('2026-04-01') });
+
+    expect(getRelatedPosts([current, olderMatch, otherTopic, newestMatch], 'current')).toEqual([newestMatch, olderMatch]);
   });
 
-  it('rejects duplicate order values within one learning path', () => {
-    const first = post('first', { learningPath: { id: 'mcp', order: 1 } });
-    const duplicate = post('duplicate', { learningPath: { id: 'mcp', order: 1 } });
+  it('limits related posts and returns none for an unknown current post', () => {
+    const current = post('current', { topic: 'mcp' });
+    const first = post('first', { topic: 'mcp', publishedDate: new Date('2026-02-01') });
+    const second = post('second', { topic: 'mcp', publishedDate: new Date('2026-03-01') });
 
-    expect(() => validateLearningPathOrders([first, duplicate])).toThrow(
-      'Learning path "mcp" has duplicate order 1 in posts "first" and "duplicate".'
-    );
-  });
-
-  it('allows the same order in different learning paths', () => {
-    const mcp = post('mcp-post', { learningPath: { id: 'mcp', order: 1 } });
-    const agentic = post('agentic-post', { learningPath: { id: 'agentic-ai', order: 1 } });
-
-    expect(validateLearningPathOrders([mcp, agentic])).toEqual([mcp, agentic]);
+    expect(getRelatedPosts([current, first, second], 'current', 1)).toEqual([second]);
+    expect(getRelatedPosts([current, first, second], 'missing')).toEqual([]);
   });
 });

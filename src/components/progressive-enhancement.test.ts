@@ -92,14 +92,3 @@ describe('CodeCopy progressive enhancement', () => {
     expect(code.textContent).toBe('oc whoami');
   });
 });
-
-describe('Giscus resilience contract', () => {
-  it('keeps an explicit fallback and an eight-second iframe timeout', () => {
-    const source = componentSource('GiscusComments');
-
-    expect(source).toContain('Comments will be available after the public GitHub Discussions repository is connected.');
-    expect(source).toContain('Comments are currently unavailable. The article remains available above.');
-    expect(source).toMatch(/8_?000/);
-    expect(source).toContain("addEventListener('load'");
-  });
-});

@@ -7,14 +7,30 @@ const validLab = {
   description: 'A test fixture with complete lab metadata for schema validation.',
   publishedDate: new Date('2026-07-20'),
   topic: 'mcp',
+  mcpLabels: ['mcp-gateway'],
   tags: ['lightspeed', 'gateway'],
   difficulty: 'intermediate',
   estimatedMinutes: 20,
   testedVersions: ['Example product 1.0.0'],
   prerequisites: ['Cluster-admin access'],
   draft: false,
-  featured: true,
-  learningPath: { id: 'mcp', order: 1 }
+  featured: true
+};
+
+const base = {
+  kind: 'guide',
+  title: 'Understand OpenShift Lightspeed behavior',
+  description: 'A sufficiently complete description for a focused technical field note.',
+  publishedDate: new Date('2026-08-17'),
+  topic: 'openshift-lightspeed',
+  mcpLabels: [],
+  tags: [],
+  difficulty: 'beginner',
+  estimatedMinutes: 5,
+  testedVersions: [],
+  prerequisites: [],
+  draft: false,
+  featured: false
 };
 
 describe('postSchema', () => {
@@ -114,5 +130,27 @@ describe('postSchema', () => {
     [{ ...validLab, testedVersions: [''] }, 'blank tested version']
   ])('rejects %s', (input) => {
     expect(postSchema.safeParse(input).success).toBe(false);
+  });
+});
+
+describe('minimal topic schema', () => {
+  it.each(['openshift-lightspeed', 'agentic-lightspeed', 'mcp'])('accepts topic %s', (topic) => {
+    expect(postSchema.safeParse({ ...base, topic }).success).toBe(true);
+  });
+
+  it.each(['openshift-ai', 'agentic-ai', 'lightspeed'])('rejects removed topic %s', (topic) => {
+    expect(postSchema.safeParse({ ...base, topic }).success).toBe(false);
+  });
+
+  it.each(['mcp-gateway', 'mcp-server', 'mcp-lifecycle-operator'])('accepts MCP label %s', (label) => {
+    expect(postSchema.safeParse({ ...base, topic: 'mcp', mcpLabels: [label] }).success).toBe(true);
+  });
+
+  it('rejects MCP labels on a non-MCP post', () => {
+    expect(postSchema.safeParse({ ...base, mcpLabels: ['mcp-server'] }).success).toBe(false);
+  });
+
+  it('does not accept the removed learningPath field', () => {
+    expect(postSchema.safeParse({ ...base, learningPath: { id: 'mcp', order: 1 } }).success).toBe(false);
   });
 });

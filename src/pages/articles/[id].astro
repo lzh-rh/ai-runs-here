@@ -2,20 +2,19 @@
 import { render } from 'astro:content';
 import PostLayout from '../../layouts/PostLayout.astro';
 import { getPostCollection } from '../../lib/post-collection';
-import { getPathNeighbors, isPublished, type Post } from '../../lib/posts';
+import { isPublished, type Post } from '../../lib/posts';
 
 export async function getStaticPaths() {
   const all = await getPostCollection();
   const mode = import.meta.env.PROD ? 'production' : 'development';
   const visible = all.filter((post) => isPublished(post, mode));
-  return visible.map((post) => ({ params: { id: post.id }, props: { post, all: visible } }));
+  return visible.map((post) => ({ params: { id: post.id }, props: { post } }));
 }
 
-const { post, all } = Astro.props as { post: Post; all: Post[] };
+const { post } = Astro.props as { post: Post };
 const { Content, headings } = await render(post);
-const neighbors = getPathNeighbors(all, post.id);
 ---
 
-<PostLayout post={post} headings={headings} neighbors={neighbors}>
+<PostLayout post={post} headings={headings} neighbors={{}}>
   <Content />
 </PostLayout>

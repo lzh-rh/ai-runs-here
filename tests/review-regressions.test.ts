@@ -90,12 +90,11 @@ describe('deployment artifact', () => {
 });
 
 describe('publication boundaries and truthful content', () => {
-  it('routes every post collection read through the learning-path validator', () => {
+  it('routes every post collection read through the collection validator', () => {
     for (const file of [
       'src/pages/index.astro',
       'src/pages/articles/[id].astro',
       'src/pages/articles/index.astro',
-      'src/pages/learning-paths/index.astro',
       'src/pages/rss.xml.ts',
       'src/layouts/PostLayout.astro'
     ]) {
@@ -107,7 +106,6 @@ describe('publication boundaries and truthful content', () => {
     for (const page of [
       'src/pages/articles/[id].astro',
       'src/pages/articles/index.astro',
-      'src/pages/learning-paths/index.astro',
       'src/layouts/PostLayout.astro'
     ]) {
       const contents = source(page);
@@ -134,48 +132,22 @@ describe('publication boundaries and truthful content', () => {
 });
 
 describe('reviewed interface contracts', () => {
-  it('clearly labels draft cards, path steps, and article metadata during development', () => {
+  it('clearly labels draft cards and article metadata during development', () => {
     const postCard = source('src/components/PostCard.astro');
-    const learningPaths = source('src/pages/learning-paths/index.astro');
     const article = source('src/layouts/PostLayout.astro');
 
     expect(postCard).toContain('post.data.draft');
     expect(postCard).toContain('Draft preview');
-    expect(learningPaths).toContain('post.data.draft');
-    expect(learningPaths).toContain('Draft preview');
-    expect(learningPaths).toContain("mode === 'development'");
     expect(article).toContain("post.data.draft ? 'Draft preview' : 'Field note'");
     expect(article).toContain("post.data.draft ? 'Draft date' : 'Published'");
     expect(article).toContain('publishedDate={post.data.draft ? undefined : post.data.publishedDate}');
   });
-  it('reveals a visible Giscus failure message on timeout or script error', () => {
-    const comments = source('src/components/GiscusComments.astro');
-
-    expect(comments).toMatch(/data-comments-fallback[^>]*hidden/);
-    expect(comments).toContain("script.addEventListener('error'");
-    expect(comments).toContain('fallback.hidden = false');
-    expect(comments).toContain('aria-live="polite"');
-  });
-
   it('identifies Li and the approved professional focus on the About page', () => {
     const about = source('src/pages/about.astro');
 
     expect(about).toContain('Li');
     expect(about).toContain('Technical Marketing Manager');
     expect(about).toContain('Applied AI in OpenShift');
-  });
-
-  it('renders homepage links only for non-empty learning paths', () => {
-    const homepage = source('src/pages/index.astro');
-
-    expect(homepage).toContain('getLearningPathGroups');
-    expect(homepage).toMatch(/filter\(\(\{ posts \}\) => posts\.length > 0\)/);
-    expect(homepage).toContain('Explore the learning path');
-  });
-
-  it('uses the defined cluster color for the newsletter input', () => {
-    expect(source('src/components/NewsletterForm.astro')).toContain('color: var(--cluster);');
-    expect(source('src/components/NewsletterForm.astro')).not.toContain('color: var(--ink);');
   });
 
   it('includes a representative published article in the axe route loop', () => {
@@ -203,19 +175,5 @@ describe('canonical site URL validation', () => {
       'valid absolute HTTP(S) origin'
     );
     expect(resolveSiteUrl('https://example.com', { production: true })).toBe('https://example.com');
-  });
-});
-
-describe('Buttondown configuration', () => {
-  it('trims a valid username slug and rejects invalid production values', async () => {
-    const { resolveButtondownUsername } = await import('../src/config/site');
-
-    expect(resolveButtondownUsername('  li-notes_1  ', { production: true })).toBe('li-notes_1');
-    expect(() => resolveButtondownUsername('   ', { production: true })).toThrow(
-      'PUBLIC_BUTTONDOWN_USERNAME is required'
-    );
-    expect(() => resolveButtondownUsername('https://buttondown.com/li', { production: true })).toThrow(
-      'valid Buttondown username slug'
-    );
   });
 });

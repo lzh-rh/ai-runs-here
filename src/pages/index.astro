@@ -4,24 +4,14 @@ import NewsletterForm from '../components/NewsletterForm.astro';
 import PostCard from '../components/PostCard.astro';
 import TerminalStatus from '../components/TerminalStatus.astro';
 import TopicRail from '../components/TopicRail.astro';
-import { learningPathConfig, siteConfig } from '../config/site';
+import { siteConfig } from '../config/site';
 import { getPostCollection } from '../lib/post-collection';
-import { getFeaturedPost, getLearningPathGroups, isPublished, sortNewest } from '../lib/posts';
-
-type LearningPathId = keyof typeof learningPathConfig;
+import { getFeaturedPost, isPublished, sortNewest } from '../lib/posts';
 
 const mode = import.meta.env.PROD ? 'production' : 'development';
 const posts = (await getPostCollection()).filter((post) => isPublished(post, mode));
 const featuredPost = getFeaturedPost(posts);
 const recentPosts = sortNewest(posts).filter((post) => post.id !== featuredPost?.id).slice(0, 4);
-const learningPathGroups = getLearningPathGroups(posts);
-const learningPaths = (Object.keys(learningPathConfig) as LearningPathId[])
-  .map((id) => ({
-    id,
-    ...learningPathConfig[id],
-    posts: learningPathGroups.get(id) ?? []
-  }))
-  .filter(({ posts }) => posts.length > 0);
 ---
 
 <BaseLayout>
@@ -62,29 +52,6 @@ const learningPaths = (Object.keys(learningPathConfig) as LearningPathId[])
         <p>No published field notes yet. The first lab is still on the workbench.</p>
       )}
     </section>
-
-    {learningPaths.length > 0 && (
-      <section class="section-block" aria-labelledby="learning-paths-title">
-        <div class="section-heading">
-          <h2 id="learning-paths-title">Follow a learning path</h2>
-          <p>
-            {mode === 'development'
-              ? 'Preview related field notes in order; draft cards are clearly marked.'
-              : 'Move through related published field notes in a deliberate order.'}
-          </p>
-        </div>
-        <div class="home-path-grid">
-          {learningPaths.map((path) => (
-            <article class="home-path-card">
-              <p class="eyebrow">{path.posts.length} {path.posts.length === 1 ? 'step' : 'steps'}</p>
-              <h3>{path.label}</h3>
-              <p>{path.description}</p>
-              <a href={`/learning-paths/#path-${path.id}`}>Explore the learning path <span aria-hidden="true">→</span></a>
-            </article>
-          ))}
-        </div>
-      </section>
-    )}
 
     <NewsletterForm />
   </div>
