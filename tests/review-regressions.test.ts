@@ -28,6 +28,12 @@ describe('GitHub Pages base path', () => {
 
     expect(workflow).toContain('npx playwright install --with-deps chromium webkit');
   });
+
+  it('allows the deployment workflow to enable Pages for a new repository', () => {
+    const workflow = source('.github/workflows/deploy-pages.yml');
+
+    expect(workflow).toMatch(/actions\/configure-pages@v5\n\s+with:\n\s+enablement: true/);
+  });
 });
 
 describe('publication boundaries and truthful content', () => {
