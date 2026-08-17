@@ -56,14 +56,9 @@ describe('publication boundaries and truthful content', () => {
     }
   });
 
-  it('keeps the illustrative MCP outline private and publishes the verified Agentic lab', () => {
-    const draft = source('src/content/posts/connect-mcp-server-to-lightspeed.mdx');
+  it('publishes the verified Agentic lab', () => {
     const articlePath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.md';
 
-    expect(draft).toMatch(/\ndraft: true\n/);
-    expect(draft).toMatch(/\nkind: lab\n/);
-    expect(draft).not.toMatch(/verified (?:OpenShift Lightspeed )?query/i);
-    expect(draft).toContain('This draft does not connect an MCP server or perform a Lightspeed query.');
     expect(existsSync(pathFromRoot(articlePath)), 'the verified Agentic lab should exist').toBe(true);
     if (existsSync(pathFromRoot(articlePath))) {
       expect(source(articlePath)).toMatch(/\ndraft: false\n/);

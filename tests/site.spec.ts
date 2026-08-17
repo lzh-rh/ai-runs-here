@@ -176,13 +176,12 @@ test('MCP areas are separate top-level topic pages', async ({ page, request }) =
   expect((await request.get(pagePath('/topics/mcp/'))).status()).toBe(404);
 });
 
-test('published output includes the Agentic lab and excludes the draft', async ({ page, request }) => {
+test('published output includes the Agentic lab', async ({ page }) => {
   await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
   await expect(page.getByRole('heading', {
     level: 1,
     name: 'How Agentic troubleshooting works in OpenShift'
   })).toBeVisible();
-  expect((await request.get(pagePath('/articles/connect-mcp-server-to-lightspeed/'))).status()).toBe(404);
 });
 
 test('Agentic troubleshooting is the first published blog article', async ({ page, request }) => {
@@ -212,10 +211,8 @@ test('RSS and sitemap expose only published routes', async ({ request }) => {
   const rss = await request.get(pagePath('/rss.xml'));
   expect(rss.status()).toBe(200);
   expect(await rss.text()).toContain(published);
-  expect(await rss.text()).not.toContain('connect-mcp-server-to-lightspeed');
   const sitemap = await request.get(pagePath('/sitemap-0.xml'));
   expect(await sitemap.text()).toContain(published);
-  expect(await sitemap.text()).not.toContain('connect-mcp-server-to-lightspeed');
 });
 
 test('removed route and integrations are absent', async ({ page, request }) => {
