@@ -3,6 +3,7 @@ import { withBase } from '../config/site';
 
 const currentPath = Astro.url.pathname;
 const isCurrent = (href: string) => {
+  if (href.includes('#')) return false;
   const path = href.split('#')[0];
   return path === withBase('/') ? currentPath === path : currentPath.startsWith(path);
 };
@@ -12,10 +13,6 @@ const primaryLinks = [
   { label: 'All articles', href: withBase('/articles/') },
   { label: 'OpenShift Lightspeed', href: withBase('/topics/openshift-lightspeed/') },
   { label: 'Agentic Lightspeed', href: withBase('/topics/agentic-lightspeed/') },
-  { label: 'MCP', href: withBase('/topics/mcp/') }
-];
-
-const mcpLinks = [
   { label: 'MCP Gateway', href: `${withBase('/topics/mcp/')}#mcp-gateway` },
   { label: 'MCP Server', href: `${withBase('/topics/mcp/')}#mcp-server` },
   { label: 'MCP Lifecycle Operator', href: `${withBase('/topics/mcp/')}#mcp-lifecycle-operator` }
@@ -30,9 +27,5 @@ const mcpLinks = [
         <a href={item.href} aria-current={isCurrent(item.href) ? 'page' : undefined}>{item.label}</a>
       </li>
     ))}
-  </ul>
-  <p class="side-nav__group">MCP topics</p>
-  <ul class="side-nav__nested">
-    {mcpLinks.map((item) => <li><a href={item.href}>{item.label}</a></li>)}
   </ul>
 </nav>

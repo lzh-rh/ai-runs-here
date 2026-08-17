@@ -44,6 +44,23 @@ test('mobile uses native topic disclosure without a scripted menu', async ({ pag
   await expect(page.getByRole('button', { name: 'Menu' })).toHaveCount(0);
 });
 
+test('MCP topics appear as flat navigation links without parent sections', async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(pagePath('/'));
+  const navigation = page.getByRole('navigation', { name: 'Topic navigation' }).first();
+
+  await expect(navigation.getByRole('link', { name: 'MCP', exact: true })).toHaveCount(0);
+  await expect(navigation.getByText('MCP topics', { exact: true })).toHaveCount(0);
+  for (const [name, fragment] of [
+    ['MCP Gateway', '#mcp-gateway'],
+    ['MCP Server', '#mcp-server'],
+    ['MCP Lifecycle Operator', '#mcp-lifecycle-operator']
+  ] as const) {
+    await expect(navigation.getByRole('link', { name, exact: true }))
+      .toHaveAttribute('href', `${pagePath('/topics/mcp/')}${fragment}`);
+  }
+});
+
 test('articles page is a plain chronological list without search', async ({ page }) => {
   await page.goto(pagePath('/articles/'));
   await expect(page.locator('h1')).toHaveText('Articles');
