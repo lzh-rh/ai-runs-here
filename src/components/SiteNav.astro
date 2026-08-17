@@ -35,8 +35,4 @@ const mcpLinks = [
   <ul class="side-nav__nested">
     {mcpLinks.map((item) => <li><a href={item.href}>{item.label}</a></li>)}
   </ul>
-  <p class="side-nav__group">About</p>
-  <ul>
-    <li><a href={withBase('/about/')} aria-current={currentPath === withBase('/about/') ? 'page' : undefined}>About this site</a></li>
-  </ul>
 </nav>

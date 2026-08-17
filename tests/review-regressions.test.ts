@@ -80,14 +80,6 @@ describe('reviewed interface contracts', () => {
     expect(text).not.toMatch(new RegExp(removedTerms.join('|'), 'i'));
   });
 
-  it('identifies Li and the approved professional focus on the About page', () => {
-    const about = source('src/pages/about.astro');
-
-    expect(about).toContain('Li');
-    expect(about).toContain('Technical Marketing Manager');
-    expect(about).toContain('Applied AI in OpenShift');
-  });
-
   it('includes a representative published article in the axe route loop', () => {
     expect(source('tests/site.spec.ts')).toContain("'/articles/how-agentic-troubleshooting-works-in-openshift/'");
   });

@@ -5,8 +5,7 @@ export const siteConfig = {
   subtitle: 'Applied AI on OpenShift',
   description: 'Practical notes on OpenShift Lightspeed, agentic systems, and MCP.',
   navigation: [
-    { label: 'Articles', href: '/articles/' },
-    { label: 'About', href: '/about/' }
+    { label: 'Articles', href: '/articles/' }
   ]
 } as const;
 

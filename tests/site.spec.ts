@@ -51,16 +51,20 @@ test('articles page is a plain chronological list without search', async ({ page
   await expect(page.getByRole('link', { name: 'How Agentic troubleshooting works in OpenShift' })).toBeVisible();
 });
 
+test('About section and route are removed', async ({ page, request }) => {
+  await page.goto(pagePath('/'));
+  await expect(page.getByRole('link', { name: /about/i })).toHaveCount(0);
+  expect((await request.get(pagePath('/about/'))).status()).toBe(404);
+});
+
 test('simple build does not ship a search runtime', async ({ request }) => {
   expect((await request.get(pagePath('/pagefind/pagefind.js'))).status()).toBe(404);
 });
 
 test('breadcrumbs use the configured site base', async ({ page }) => {
-  for (const path of ['/articles/', '/about/']) {
-    await page.goto(pagePath(path));
-    await expect(page.locator('.breadcrumb').getByRole('link', { name: 'Home' }))
-      .toHaveAttribute('href', pagePath('/'));
-  }
+  await page.goto(pagePath('/articles/'));
+  await expect(page.locator('.breadcrumb').getByRole('link', { name: 'Home' }))
+    .toHaveAttribute('href', pagePath('/'));
 });
 
 test('home exposes exactly the three primary topic links', async ({ page }) => {
@@ -126,12 +130,6 @@ test('MCP navigation targets the three topic sections', async ({ page }) => {
   }
 });
 
-test('site identifies itself as personal and unofficial', async ({ page }) => {
-  await page.goto(pagePath('/about/'));
-  await expect(page.getByText(/Li is a Technical Marketing Manager focused on Applied AI in OpenShift/i)).toBeVisible();
-  await expect(page.getByText(/not an official Red Hat website/i)).toBeVisible();
-});
-
 test('published output includes the Agentic lab and excludes the draft', async ({ page, request }) => {
   await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
   await expect(page.getByRole('heading', {
@@ -186,7 +184,7 @@ test('removed route and integrations are absent', async ({ page, request }) => {
 test('core pages have no serious accessibility violations', async ({ page }) => {
   for (const path of [
     '/', '/articles/', '/topics/openshift-lightspeed/', '/topics/agentic-lightspeed/',
-    '/topics/mcp/', '/about/', '/articles/how-agentic-troubleshooting-works-in-openshift/'
+    '/topics/mcp/', '/articles/how-agentic-troubleshooting-works-in-openshift/'
   ]) {
     await page.goto(pagePath(path));
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -206,7 +204,7 @@ test('keyboard users can reach main content', async ({ browserName, page }) => {
 test('key pages do not overflow at common widths', async ({ page }) => {
   for (const width of [320, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const path of ['/', '/topics/mcp/', '/articles/', '/about/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
+    for (const path of ['/', '/topics/mcp/', '/articles/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
       await page.goto(pagePath(path));
       const widths = await page.evaluate(() => ({
         viewport: document.documentElement.clientWidth,

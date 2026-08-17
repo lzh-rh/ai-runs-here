@@ -7,6 +7,6 @@ describe('withBase', () => {
   });
 
   it('normalizes base paths without a trailing slash', () => {
-    expect(withBase('/about/', '/ai-runs-here')).toBe('/ai-runs-here/about/');
+    expect(withBase('/articles/', '/ai-runs-here')).toBe('/ai-runs-here/articles/');
   });
 });
