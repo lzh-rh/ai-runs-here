@@ -1,6 +1,5 @@
 ---
 import Header from '../components/Header.astro';
-import Footer from '../components/Footer.astro';
 import SiteNav from '../components/SiteNav.astro';
 import { siteConfig, withBase } from '../config/site';
 import '../styles/global.css';
@@ -68,6 +67,5 @@ const hasContents = Astro.slots.has('contents');
         </aside>
       )}
     </div>
-    <Footer />
   </body>
 </html>

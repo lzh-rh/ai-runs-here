@@ -66,6 +66,19 @@ const formatDate = (date: Date) =>
       </p>
     </header>
 
+    {tableOfContents.length > 0 && (
+      <details class="article-toc-mobile">
+        <summary>On this page</summary>
+        <ol>
+          {tableOfContents.map((heading) => (
+            <li class:list={{ 'article-toc-mobile__nested': heading.depth === 3 }}>
+              <a href={`#${heading.slug}`}>{heading.text}</a>
+            </li>
+          ))}
+        </ol>
+      </details>
+    )}
+
     {(showEnvironment || showPrerequisites) && (
       <div class="article-setup">
         {showEnvironment && (

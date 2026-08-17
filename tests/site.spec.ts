@@ -31,6 +31,58 @@ test('article uses the simple documentation shell', async ({ page }) => {
   );
 });
 
+test('header uses the supplied Red Hat identity pattern', async ({ page }) => {
+  await page.goto(pagePath('/'));
+
+  const brand = page.getByRole('link', { name: 'AI Runs Here home' });
+  await expect(brand.locator('img.site-brand__icon')).toHaveAttribute(
+    'src',
+    pagePath('/red-hat-icon.png')
+  );
+  await expect(brand.locator('.site-brand__divider')).toBeVisible();
+  await expect(brand.getByText('AI Runs Here', { exact: true })).toBeVisible();
+  await expect(brand.getByText('Applied AI on OpenShift', { exact: true })).toBeVisible();
+});
+
+test('pages omit the visible publication footer', async ({ page }) => {
+  await page.goto(pagePath('/'));
+
+  await expect(page.getByRole('contentinfo')).toHaveCount(0);
+  await expect(page.getByText('personal and unofficial learning publication')).toHaveCount(0);
+});
+
+test('article presents source-backed learning aids as structured content', async ({ page }) => {
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  await expect(page.getByRole('heading', { level: 2, name: 'What you will learn' })).toBeVisible();
+  await expect(page.locator('.article-callout--checkpoint')).toHaveCount(3);
+  await expect(page.locator('.article-callout--caution')).toContainText(
+    'Enabling a receiver can create runs for multiple eligible alerts.'
+  );
+  await expect(page.getByText('OpenShift 5.0.0-ec.6', { exact: true })).toBeVisible();
+  await expect(page.locator('.article-callout--important')).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'investigate-alert', exact: true }).locator('code')
+  ).toHaveCount(0);
+  await expect(page.locator('strong code').filter({ hasText: 'AgenticRun' })).toHaveCount(0);
+
+  const workflow = page.getByRole('figure', { name: 'Alert-triggered Agentic troubleshooting flow' });
+  await expect(workflow).toBeVisible();
+  await expect(workflow.locator('[data-workflow-step]')).toHaveCount(7);
+});
+
+test('article exposes its table of contents on mobile without JavaScript', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  const disclosure = page.locator('details.article-toc-mobile');
+  await expect(disclosure).toBeVisible();
+  await expect(disclosure).not.toHaveAttribute('open', '');
+  await disclosure.locator('summary').click();
+  await expect(disclosure.getByRole('link', { name: 'Prepare your environment' }))
+    .toHaveAttribute('href', '#prepare-your-environment');
+});
+
 test('mobile uses native topic disclosure without a scripted menu', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
   await page.goto(pagePath('/'));

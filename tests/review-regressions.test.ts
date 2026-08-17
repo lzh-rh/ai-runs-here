@@ -57,13 +57,12 @@ describe('publication boundaries and truthful content', () => {
   });
 
   it('publishes the verified Agentic lab', () => {
-    const articlePath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.md';
+    const articlePath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.mdx';
 
     expect(existsSync(pathFromRoot(articlePath)), 'the verified Agentic lab should exist').toBe(true);
     if (existsSync(pathFromRoot(articlePath))) {
       expect(source(articlePath)).toMatch(/\ndraft: false\n/);
       expect(source(articlePath)).toMatch(/\nkind: lab\n/);
-      expect(source(articlePath)).toContain('The example was live-verified on a disposable OpenShift `5.0.0-ec.5` cluster');
     }
   });
 });
