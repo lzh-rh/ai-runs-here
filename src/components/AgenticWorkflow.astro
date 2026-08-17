@@ -12,19 +12,19 @@
       <small>Holds firing alerts</small>
     </li>
     <li data-workflow-step>
-      <span class="agentic-workflow__label">Translate</span>
+      <span class="agentic-workflow__label">Create work order</span>
       <strong>Agentic Alerts Adapter</strong>
-      <small>Polls, filters, and creates a work order</small>
+      <small>Checks alert rules and creates a work order</small>
     </li>
     <li class="agentic-workflow__handoff" data-workflow-step>
-      <span class="agentic-workflow__label">Kubernetes API handoff</span>
+      <span class="agentic-workflow__label">Kubernetes API</span>
       <strong>AgenticRun</strong>
       <small>Stores the request, progress, and results</small>
     </li>
     <li data-workflow-step>
-      <span class="agentic-workflow__label">Coordinate</span>
+      <span class="agentic-workflow__label">Manage</span>
       <strong>Lightspeed Agentic Operator</strong>
-      <small>Watches the run and advances each stage</small>
+      <small>Watches the run and starts each stage</small>
     </li>
     <li data-workflow-step>
       <span class="agentic-workflow__label">Investigate</span>
@@ -32,7 +32,7 @@
       <small>Collects evidence and proposes options</small>
     </li>
     <li class="agentic-workflow__stages" data-workflow-step>
-      <span class="agentic-workflow__label">Controlled action</span>
+      <span class="agentic-workflow__label">Approved action</span>
       <div>
         <strong>Approval gate</strong>
         <span aria-hidden="true">→</span>
@@ -40,8 +40,8 @@
         <span aria-hidden="true">→</span>
         <strong>Verification sandbox</strong>
       </div>
-      <small>Approve one option, apply it with scoped access, and verify recovery</small>
+      <small>Approve one option, apply it with limited access, and check recovery</small>
     </li>
   </ol>
-  <p class="agentic-workflow__return">Results and conditions return to the Kubernetes API.</p>
+  <p class="agentic-workflow__return">The workers save their results and status in the Kubernetes API.</p>
 </figure>

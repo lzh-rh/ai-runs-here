@@ -1,7 +1,7 @@
 ---
 kind: lab
 title: How Agentic troubleshooting works in OpenShift
-description: Follow an OpenShift alert through Agentic analysis, approval-gated remediation, and verification, then learn how the components connect.
+description: Follow an OpenShift alert from investigation to an approved fix, then check that the workload is healthy.
 publishedDate: 2026-08-17
 updatedDate: 2026-08-17
 topic: agentic-lightspeed
@@ -17,7 +17,7 @@ testedVersions:
   - OpenShift 5.0.0-ec.6
 prerequisites:
   - Access to the prepared OpenShift 5 Early Access showroom environment.
-  - Access to the OpenShift web console and the oc command-line interface.
+  - Access to the OpenShift web console and the oc command-line tool.
   - Permission to view alerts and Agentic resources in openshift-lightspeed.
   - Permission to edit ConfigMap/alerts-adapter-config and restart its Deployment for the alert-triggered exercise.
 draft: false
@@ -27,64 +27,70 @@ featured: true
 import AgenticWorkflow from '../../components/AgenticWorkflow.astro';
 import ArticleCallout from '../../components/ArticleCallout.astro';
 
-An OpenShift alert shows a symptom, but may not identify the cause or safest next step. As an administrator, you collect evidence, connect symptoms, review a repair, and confirm recovery.
+An OpenShift alert tells you that something may be wrong. It may not show the cause or the safest fix. In this lab, you follow an alert, review the evidence, approve an optional fix, and check the result.
 
-With Agentic troubleshooting, you can follow those tasks through visible Kubernetes resources. The workflow investigates an eligible alert, presents an action for review, runs an approved change with scoped permissions, and checks the workload again.
+Agentic troubleshooting uses Kubernetes objects that you can inspect. The system investigates an alert, suggests a fix, waits for approval, applies only the approved change, and checks the workload again.
 
-The [OpenShift 5 Early Access showroom exercise](https://rhpds.github.io/ocp5-ea-showroom/modules/agentic-troubleshooting.html) provides the example and Alerts Adapter configuration used in this article.
+This article follows the [OpenShift 5 Early Access showroom exercise](https://rhpds.github.io/ocp5-ea-showroom/modules/agentic-troubleshooting.html). It uses the example and Alerts Adapter settings from that exercise.
 
 <section className="learning-objectives" aria-labelledby="learning-objectives-title">
   <h2 id="learning-objectives-title">What you will learn</h2>
   <p>By the end of this article, you will be able to:</p>
   <ul>
     <li>Follow an alert-triggered troubleshooting workflow.</li>
-    <li>Explain the roles of the Alerts Adapter, <code>AgenticRun</code>, Agentic Operator, and sandbox pods.</li>
-    <li>Understand where human approval, temporary RBAC, and verification fit.</li>
-    <li>Read the important fields in the Alerts Adapter Deployment and ConfigMap.</li>
+    <li>Describe what the Alerts Adapter, AgenticRun, Agentic Operator, and sandbox pods do.</li>
+    <li>Find where human approval, temporary Kubernetes permissions, and verification happen.</li>
+    <li>Read the main settings in the Alerts Adapter Deployment and ConfigMap.</li>
   </ul>
 </section>
 
+## Start with a simple mental model
+
+Think of the workflow as a support ticket:
+
+1. An alert reports a problem.
+2. The Alerts Adapter opens a work order named AgenticRun.
+3. The Agentic Operator sends short-lived sandbox pods to investigate the problem.
+4. You review and approve an optional fix.
+5. A separate sandbox pod checks the workload after the fix.
+
+The later sections explain each part of this flow.
+
 ## Prepare your environment
 
-For this article, you need the following prerequisites:
+You need:
 
 - Access to the prepared OpenShift 5 Early Access showroom environment.
 
-- Access to the OpenShift web console and the `oc` command-line interface.
+- Access to the OpenShift web console and the `oc` command-line tool.
 
 - Permission to view alerts and Agentic resources in `openshift-lightspeed`.
 
 - Permission to edit `ConfigMap/alerts-adapter-config` and restart its Deployment for the alert-triggered exercise.
 
-The showroom already provides the sample applications, monitoring rules, Alerts Adapter, Agentic Operator, sandbox configuration, and deliberate payment failure used here. If you are working in another cluster, resource names and behavior might differ.
+The showroom already includes the sample applications, monitoring rules, Alerts Adapter, Agentic Operator, sandbox settings, and planned payment failure. Resource names and behavior may differ on another cluster.
 
 ## Follow the Agentic troubleshooting exercise
 
-The showroom contains two related experiences:
+The showroom has two parts:
 
-- Exercises 1-3 use OpenShift Lightspeed chat to investigate a timeout, a critical alert, and metrics. You start these conversations yourself.
+- Exercises 1-3 use OpenShift Lightspeed chat to investigate a timeout, a critical alert, and metrics. You open the chat and start each investigation.
 
-- Exercise 4 enables alert-triggered Agentic troubleshooting with the Alerts Adapter, `AgenticRun`, and sandbox pods.
+- Exercise 4 uses the Alerts Adapter, AgenticRun, and sandbox pods to start an investigation from an alert.
 
 ### Confirm the incident
 
-In the OpenShift web console, check that the sample applications are unhealthy and that `PaymentErrorRateHigh` is firing. The Agentic workflow needs real cluster evidence before it can investigate the failure.
+In the OpenShift web console, check that the sample applications are unhealthy and that `PaymentErrorRateHigh` is firing. The workflow needs current cluster data before it can investigate the problem.
 
 In this lab, the expected failure chain is:
 
-```text
-reporting-service v1.0.2 leaks database connections
-        ↓
-PostgreSQL runs out of normal connection slots
-        ↓
-payments-api cannot connect to PostgreSQL
-        ↓
-Payment requests return HTTP 503
-        ↓
-PaymentErrorRateHigh fires
-```
+1. reporting-service v1.0.2 leaks database connections.
+2. PostgreSQL runs out of normal connection slots.
+3. payments-api cannot connect to PostgreSQL.
+4. Payment requests return HTTP 503.
+5. PaymentErrorRateHigh fires.
 
-Use this failure chain as the lab’s expected answer. On another cluster, trust its logs, events, metrics, and recent changes.
+This failure chain is the expected result for the lab. On another cluster, check its logs, events, metrics, and recent changes before deciding what caused the problem.
 
 <ArticleCallout variant="checkpoint" title="Checkpoint">
   <code>PaymentErrorRateHigh</code> is firing, and the sample payment path is returning HTTP 503.
@@ -92,9 +98,9 @@ Use this failure chain as the lab’s expected answer. On another cluster, trust
 
 ### Allow the adapter to process the alert
 
-The EAP adapter starts with no allowed receivers. An administrator must opt in a receiver before firing alerts can create runs.
+The Early Access adapter starts with no allowed Alertmanager receivers. A receiver is a named route that sends a group of alerts to a target. An administrator must allow a receiver before its alerts can create runs.
 
-Back up the current adapter payload, edit it, and restart the adapter:
+Back up the current adapter settings, edit them, and restart the adapter:
 
 ```bash
 oc -n openshift-lightspeed get configmap alerts-adapter-config \
@@ -107,6 +113,8 @@ oc -n openshift-lightspeed rollout restart \
   deployment/lightspeed-agentic-alerts-adapter
 ```
 
+The first command saves the current `config.yaml` value in `/tmp`. The second command opens the ConfigMap in your text editor. The last command restarts the adapter so that it reads the new settings.
+
 Under `filtering.allowedReceivers`, enable `critical`:
 
 ```yaml
@@ -115,19 +123,19 @@ filtering:
     - critical
 ```
 
-`critical` names an **Alertmanager receiver**. Any eligible alert routed to this receiver can create a run. During the live experiment, the receiver produced runs for the payment alert and an unrelated `ClusterOperatorDown` alert.
+`critical` is the name of an **Alertmanager receiver**. An alert sent to this receiver can create a run when it matches the adapter rules. During my OpenShift 5.0.0-ec.6 test, this receiver created runs for the payment alert and an unrelated `ClusterOperatorDown` alert.
 
 <ArticleCallout variant="caution" title="Review every generated run">
-  Enabling a receiver can create runs for multiple eligible alerts. Review every generated run before approving any action.
+  Enabling a receiver can create runs for several alerts that match the adapter rules. Review every generated run before approving any action.
 </ArticleCallout>
 
 ### Open the generated investigation
 
-After the next adapter poll, go to **Administrator → Agentic Runs → Agentic runs**. Open the run for `PaymentErrorRateHigh`.
+The adapter checks Alertmanager at set intervals. After its next check, go to **Administrator → Agentic Runs → Agentic runs**. Open the run for `PaymentErrorRateHigh`.
 
-The run first shows analysis in progress. After analysis finishes, the run moves to a proposed state and displays the diagnosis, evidence, and remediation options. At this point, the analysis sandbox has **not** changed the workload.
+The run first shows that analysis is in progress. After analysis finishes, the run moves to the `Proposed` state. It shows the diagnosis, evidence, and possible fixes. At this point, the analysis sandbox has **not** changed the workload.
 
-The same objects are visible from the CLI:
+You can also view the same objects from the command line:
 
 ```bash
 oc -n openshift-lightspeed get agenticruns
@@ -138,27 +146,33 @@ oc -n openshift-lightspeed get analysisresults \
   -l agentic.openshift.io/run="$ALERT_RUN"
 ```
 
-Look at `spec.targetNamespaces`, `status.conditions`, and `status.steps.analysis.results`. They show the investigation boundary, progress, and the durable analysis result.
+The first command lists all runs. Replace `replace-with-payment-run-name` with the name of the payment run. The last two commands show the full run and its analysis result.
+
+Look at these fields:
+
+- `spec.targetNamespaces` lists the namespaces that the run can investigate.
+- `status.conditions` shows the run's progress.
+- `status.steps.analysis.results` points to the saved analysis result.
 
 <ArticleCallout variant="checkpoint" title="Checkpoint">
-  The payment run contains an analysis result and proposed remediation options, but execution has not started.
+  The payment run contains an analysis result and possible fixes, but execution has not started.
 </ArticleCallout>
 
-### Review, approve, and verify the optional remediation
+### Review, approve, and verify the optional fix
 
-In the lab, review the proposed rollback of `reporting-service` to `v1.0.1`. Check the evidence, exact target, commands, requested permissions, rollback plan, and verification plan before selecting **Execute remediation** and confirming the action.
+In the lab, review the proposed change from `reporting-service` version `v1.0.2` to `v1.0.1`. Check the evidence, target, commands, requested permissions, rollback plan, and verification plan. Then select **Execute remediation** and confirm the action.
 
-The lab policy sets automatic analysis, manual execution, and automatic verification:
+The lab uses this approval policy:
 
 1. An analysis sandbox investigates and proposes options.
 2. The workflow stops at the approval gate.
-3. Your approval selects one option. The Operator scopes execution permissions to that action.
-4. An execution sandbox receives temporary RBAC for the selected action.
+3. Your approval selects one option. The Operator limits the permissions to that action.
+4. An execution sandbox receives those temporary permissions. Kubernetes calls this permission system role-based access control (RBAC).
 5. A different verification sandbox checks the workload again.
 
-In the live experiment, the execution identity could patch only `deployment/reporting-service` and read its ReplicaSets. It could not patch `payments-api` or list Secrets. Verification then confirmed image `v1.0.1`, readiness `1/1`, recovered HTTP responses, and cleared payment alerts.
+During my OpenShift 5.0.0-ec.6 test, the execution ServiceAccount could update only `deployment/reporting-service`. A ServiceAccount is the Kubernetes identity used by a pod. It could read ReplicaSets, which record Deployment versions. It could not update `payments-api` or list Secrets. The verification stage then confirmed image `v1.0.1`, readiness `1/1`, working HTTP responses, and cleared payment alerts.
 
-Verify the cluster yourself. Treat a successful agent response as one piece of evidence:
+Check the cluster yourself. A successful agent response is only one piece of evidence:
 
 ```bash
 oc -n payments get deployment reporting-service
@@ -168,7 +182,9 @@ oc -n openshift-lightspeed get executionresults,verificationresults \
   -l agentic.openshift.io/run="$ALERT_RUN"
 ```
 
-Restore the exact adapter configuration that you backed up so future alerts do not start more lab runs:
+The first command checks the Deployment. The second reads recent application logs. The last command shows the saved execution and verification results for this run.
+
+Restore the adapter settings that you backed up so future alerts do not start more lab runs:
 
 ```bash
 oc -n openshift-lightspeed set data \
@@ -179,51 +195,53 @@ oc -n openshift-lightspeed rollout restart \
   deployment/lightspeed-agentic-alerts-adapter
 ```
 
-Review every run created while `critical` was enabled. Deny an unintended proposal instead of approving it to clear the list.
+The first command restores the saved file. The second restarts the adapter with the restored settings.
+
+Review every run created while `critical` was enabled. If you did not want a run, deny its proposal instead of approving it.
 
 <ArticleCallout variant="checkpoint" title="Checkpoint">
-  The intended workload is healthy, the verification result is recorded, and the original adapter configuration is restored.
+  The target workload is healthy, the verification result is saved, and the original adapter settings are restored.
 </ArticleCallout>
 
 ## Understand what happens behind the scenes
 
-The Kubernetes API provides the handoff between the adapter and the Agentic Operator.
+The Kubernetes API is where components read and save Kubernetes objects. It provides the handoff between the adapter and the Agentic Operator.
 
 <AgenticWorkflow />
 
 Read the numbered arrows from top to bottom:
 
-1. **Alertmanager → Alerts Adapter:** The adapter polls Alertmanager for active alerts.
-2. **Alerts Adapter → AgenticRun:** For each eligible alert, the adapter creates a Kubernetes work order.
+1. **Alertmanager → Alerts Adapter:** The adapter checks Alertmanager at set intervals for active alerts.
+2. **Alerts Adapter → AgenticRun:** For each alert that matches its rules, the adapter creates a Kubernetes work order.
 3. **AgenticRun → Agentic Operator:** The Operator watches the work order through the Kubernetes API.
 4. **Agentic Operator → analysis sandbox:** The Operator creates a temporary worker to investigate and propose options.
-5. **Analysis → approval gate:** The proposal waits when the applicable `ApprovalPolicy` requires a person to decide.
-6. **Agentic Operator → execution sandbox:** After approval, the Operator creates a new worker with temporary, scoped RBAC.
+5. **Analysis → approval gate:** The proposal waits when the `ApprovalPolicy` requires a person to decide.
+6. **Agentic Operator → execution sandbox:** After approval, the Operator creates a new worker. RBAC gives this worker temporary permissions for the approved action.
 7. **Agentic Operator → verification sandbox:** After execution, the Operator creates a separate worker to check recovery.
 
-Each sandbox returns a typed result. The Operator records those results and the run’s conditions in the Kubernetes API.
+Each sandbox returns a result object for its stage. The Operator saves these results and the run's conditions in the Kubernetes API.
 
-The adapter creates the work order in the Kubernetes API. The Operator watches that object and creates the required sandbox workers. This API handoff keeps the adapter separate from the sandbox pods.
+The adapter creates the work order in the Kubernetes API. The Operator watches the work order and creates the sandbox pods. The adapter and sandbox pods do not need a direct connection because they share information through the API.
 
 ### Agentic Alerts Adapter: the translator
 
-The adapter serves as an intake clerk. The [Alerts Adapter repository](https://github.com/openshift/lightspeed-agentic-alerts-adapter) includes `ARCHITECTURE.md`, which explains the design. The adapter:
+Think of the adapter as an intake clerk. The [Alerts Adapter repository](https://github.com/openshift/lightspeed-agentic-alerts-adapter) includes an `ARCHITECTURE.md` file that explains its design. The adapter:
 
-1. polls the in-cluster Alertmanager API for firing alerts;
-2. filters alerts by receiver, severity, delay, and previous runs;
-3. converts each eligible alert into one `AgenticRun` in `openshift-lightspeed`.
+1. checks the Alertmanager API inside the cluster for firing alerts;
+2. checks each alert's receiver, severity, age, and previous runs;
+3. creates one `AgenticRun` in `openshift-lightspeed` for each alert that matches the rules.
 
-Polling lets the adapter rediscover an alert that is still firing after a restart. On every poll, it reads current alerts and existing runs instead of keeping its own database. After it creates a run, the Agentic Operator owns the remaining workflow.
+Polling means checking for new data at set intervals. This lets the adapter find an alert that is still firing after a restart. On each check, the adapter reads current alerts and existing runs. It does not keep its own database. After it creates a run, the Agentic Operator manages the remaining steps.
 
-The adapter copies useful alert context into the run: alert name, severity, summary, start time, fingerprints, affected namespace, and an investigation request. It also adds the configured agent and skill settings.
+The adapter copies useful alert details into the run. These details include the alert name, severity, summary, start time, unique identifier, affected namespace, and investigation request. The adapter also adds the chosen agent and skill settings.
 
 The adapter does **not** diagnose the incident, call the large language model (LLM), create a sandbox, approve a proposal, or change the workload.
 
 #### Read the adapter Deployment YAML
 
-The adapter’s `Deployment` answers *where and how the adapter runs*. The `alerts-adapter-config` ConfigMap, explained later, answers *which alerts it handles and how often it checks*. Keeping those jobs separate makes both files easier to understand.
+The adapter's `Deployment` shows where and how the adapter runs. The `alerts-adapter-config` ConfigMap shows which alerts it handles and how often it checks them. The ConfigMap appears later in this article.
 
-I drew the following example from the `ARCHITECTURE.md` deployment in the [Alerts Adapter repository](https://github.com/openshift/lightspeed-agentic-alerts-adapter) and cross-checked it against the Early Access deployment template. Use it to understand the connections in this walkthrough. Use the installation manifest to deploy the adapter.
+The following example is based on the architecture documented in the [Alerts Adapter repository](https://github.com/openshift/lightspeed-agentic-alerts-adapter). I also compared it with the Early Access deployment template. The example shows how the parts in this article connect. To deploy the adapter, use the installation manifest.
 
 ```yaml
 apiVersion: apps/v1
@@ -258,42 +276,50 @@ spec:
             name: alerts-adapter-config
 ```
 
+<div className="article-table" tabIndex={0} role="region" aria-label="Adapter Deployment fields">
+
 | Important field | Why it matters |
 | --- | --- |
-| `namespace:` `openshift-lightspeed` | Places the adapter beside the Agentic components in the EAP environment. |
-| `replicas:` `1` | Runs one adapter pod. One is sufficient for this stateless polling design because a restarted pod rebuilds its view from Alertmanager and the Kubernetes API. |
+| `namespace:` `openshift-lightspeed` | Places the adapter beside the Agentic components in this environment. |
+| `replicas:` `1` | Runs one adapter pod. After a restart, the pod reads the alerts and existing runs from the APIs again. It does not need a local database. |
 | `selector.matchLabels` and `template.metadata.labels` | The matching label lets the Deployment identify and manage its pod. |
-| `serviceAccountName` | Gives the pod its Kubernetes identity. Separate RBAC grants that identity permission to read alerts and create or list `AgenticRun` objects. |
-| `image` | Selects the adapter program to run. The installation supplies the actual image; `latest` above is the readable value used by the architecture example. |
-| `ALERTMANAGER_URL` | Points the adapter to Alertmanager’s in-cluster service. This is the source that the adapter polls for firing alerts. |
-| `configMap`, `mountPath`, and `readOnly` | Mount `alerts-adapter-config` inside the container at `/etc/alerts-adapter` without allowing the container to change it. |
+| `serviceAccountName` | Gives the pod a Kubernetes identity. RBAC rules let this identity read alerts and create or list `AgenticRun` objects. |
+| `image` | Selects the adapter program. The installation manifest supplies the image to use. The architecture example uses `latest` as a readable sample value. |
+| `ALERTMANAGER_URL` | Gives the adapter the address of the Alertmanager service inside the cluster. The adapter checks this service for firing alerts. |
+| `configMap`, `mountPath`, and `readOnly` | Places `alerts-adapter-config` inside the container at `/etc/alerts-adapter`. The `readOnly` setting stops the container from changing the mounted files. |
+
+</div>
 
 This YAML starts the adapter. The ConfigMap you edit during the exercise selects the `critical` receiver.
 
 ### AgenticRun: the work order
 
-An `AgenticRun` is a Kubernetes custom resource that stores workflow data in the Kubernetes API. The Agentic Operator and sandbox pods act on that data.
+An AgenticRun is a custom Kubernetes object added by the Agentic Operator. It stores the workflow data in the Kubernetes API. The Agentic Operator and sandbox pods read and update that data.
 
 Read its two halves as a work order and progress record:
 
+<div className="article-table" tabIndex={0} role="region" aria-label="AgenticRun fields">
+
 | Area | Meaning |
 | --- | --- |
-| `spec` | The work order: the request, target namespace, analysis/execution/verification stages, agents, and skills. |
-| `status` | The progress record: conditions and references to `AnalysisResult`, `ExecutionResult`, and `VerificationResult` objects. |
+| `spec` | The work order. It contains the request, target namespace, stages, agents, and skills. |
+| `status` | The progress record. It contains conditions and links to the analysis, execution, and verification result objects. |
+
+</div>
 
 The adapter creates the work order. The Agentic Operator updates its progress as each stage finishes.
 
 ### Lightspeed Agentic Operator: the coordinator
 
-The Lightspeed Agentic Operator is a Kubernetes controller. It reconciles the requested work in `spec` with the progress recorded in `status`.
+The Lightspeed Agentic Operator is a Kubernetes controller. A controller watches Kubernetes objects and works toward the requested state. This Operator reads the requested work in `spec` and the current progress in `status`.
 
-For each run, the Operator determines the next required stage, creates or waits for the appropriate sandbox, stores the returned result, and updates the run’s conditions. It also manages the approval object and the temporary execution RBAC. In this lab, analysis starts automatically, execution waits for your approval, and verification starts automatically after execution.
+For each run, the Operator finds the next stage and creates the sandbox pod for that stage. It waits for the result and then updates the run's conditions. It also manages the approval object and temporary permissions for the fix. In this lab, analysis starts on its own, execution waits for your approval, and verification starts after execution.
 
-The Operator coordinates the workflow. Sandbox pods perform the investigation, remediation, and verification.
+The Operator manages the workflow. Sandbox pods perform the investigation, fix, and verification.
 
 #### How the ApprovalPolicy controls the gates
 
-The [Agentic Operator](https://github.com/openshift/lightspeed-agentic-operator) reads an `ApprovalPolicy` to decide whether each stage can start automatically or must wait for a person. The effective stage decisions in this Early Access exercise are:
+The [Agentic Operator](https://github.com/openshift/lightspeed-agentic-operator) reads an `ApprovalPolicy`. This policy says whether a stage can start on its own or must wait for a person. This lab uses these settings:
 
 ```yaml
 apiVersion: agentic.openshift.io/v1alpha1
@@ -311,36 +337,40 @@ spec:
       approval: Automatic
 ```
 
-`Automatic` allows the Operator to begin that stage when the preceding requirements are complete. `Manual` pauses the workflow for an administrator’s decision. In this lab, the Operator starts analysis, waits for approval before execution, and starts verification after execution. The policy controls *when* a stage can start. The administrator chooses the remediation, and Kubernetes RBAC limits its permissions.
+`Automatic` lets the Operator start a stage after the earlier stage has finished. `Manual` pauses the workflow for an administrator's decision. In this lab, the Operator starts analysis, waits for approval before execution, and starts verification after execution. The policy controls when a stage can start. You choose the fix, and Kubernetes RBAC limits what the execution sandbox can change.
 
 ### Sandbox pods: the temporary workers
 
-A sandbox pod is an isolated runtime for one workflow stage. It receives:
+A sandbox pod is a short-lived worker for one stage. It receives:
 
-- an agent definition and LLM connection;
-- a procedure called a skill, such as [investigate-alert](https://github.com/openshift/agentic-skills/tree/main/cluster-troubleshoot/investigate-alert);
-- a ServiceAccount whose RBAC determines which Kubernetes actions are allowed;
-- the request and context for the current run.
+- an agent definition and a connection to a large language model (LLM);
+- a set of instructions called a skill, such as [investigate-alert](https://github.com/openshift/agentic-skills/tree/main/cluster-troubleshoot/investigate-alert);
+- a ServiceAccount that gives the pod its Kubernetes identity and permissions;
+- the request and related alert data for the current run.
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Agentic workflow stages">
 
 | Stage or gate | What happens |
 | --- | --- |
-| Analysis sandbox | Collects the cluster evidence permitted by its ServiceAccount, asks the LLM to reason over that evidence, and returns a diagnosis and possible remediation options. The Operator reserves temporary execution RBAC for the execution sandbox. |
-| Approval gate | An administrator reviews the proposal and selects or denies an action when execution requires manual approval. |
-| Execution sandbox | Runs only the selected, approved remediation with temporary RBAC generated for that action. |
-| Verification sandbox | Starts as a separate worker after execution and checks the workload again. It returns structured checks and a pass or fail result. |
+| Analysis sandbox | Uses the allowed cluster data to produce a diagnosis and possible fixes. The Operator prepares temporary permissions for the execution sandbox. |
+| Approval gate | An administrator reviews the proposal. The administrator can select an action or deny it. |
+| Execution sandbox | Runs only the approved fix. Its temporary RBAC allows only the selected action. |
+| Verification sandbox | Starts after execution and checks the workload again. It returns a list of checks and a pass or fail result. |
 
-The Agentic Operator waits for the sandbox service to become ready and sends it the current stage request. The sandbox uses its configured agent, skill, tools, and permissions, then returns structured output. The Operator stores that output in a typed result object.
+</div>
 
-Analysis, execution, and verification use separate temporary workers. A skill tells the worker *how* to investigate; RBAC decides what it is *allowed* to read or change. The temporary pods and execution RBAC can be removed after the run, while the result objects remain as an inspectable record.
+The Agentic Operator waits for the sandbox service to become ready. It then sends the request for the current stage. The sandbox uses its agent, skill, tools, and permissions and returns the result. The Operator saves the result in a Kubernetes object for that stage.
+
+Analysis, execution, and verification use separate temporary workers. A skill tells a worker how to investigate. RBAC controls what the worker can read or change. Kubernetes can remove the temporary pods and execution permissions after the run. The result objects remain so that you can review what happened.
 
 ## Understand the Alerts Adapter configuration
 
-The file has **two YAML levels**:
+The configuration contains **two YAML documents**:
 
-1. The outer YAML creates a Kubernetes `ConfigMap`.
-2. `data.config.yaml` is a text value containing the adapter’s own YAML.
+1. The outer document creates a Kubernetes `ConfigMap`.
+2. The `data.config.yaml` value contains the adapter's YAML as text.
 
-This is the effective EAP configuration after enabling the `critical` receiver, with comments removed for readability:
+This is the configuration used in the test after enabling the `critical` receiver. Comments are removed to keep the example short:
 
 ```yaml
 apiVersion: v1
@@ -365,58 +395,68 @@ data:
 
 ### The outer ConfigMap
 
+<div className="article-table" tabIndex={0} role="region" aria-label="ConfigMap fields">
+
 | Field | Meaning |
 | --- | --- |
-| `apiVersion:` `v1` | Uses the core Kubernetes API version for a ConfigMap. |
-| `kind:` `ConfigMap` | Stores non-secret configuration. Credentials belong in a Secret, not here. |
-| `metadata.name` | Names the object `alerts-adapter-config`, which is the ConfigMap expected by this deployment. |
+| `apiVersion:` `v1` | Uses the main Kubernetes API version for a ConfigMap. |
+| `kind:` `ConfigMap` | Stores settings that are not secret. Store passwords and tokens in a Secret instead. |
+| `metadata.name` | Names the object `alerts-adapter-config`. The Deployment expects this name. |
 | `metadata.namespace` | Places it beside the adapter in `openshift-lightspeed`. |
-| `data` | Begins the ConfigMap’s key/value data. |
-| `config.yaml` | Creates a key named `config.yaml`. In the YAML example, the block marker after the colon means that the following indented lines are stored as one multiline string. The adapter parses that string as a second YAML document. |
+| `data` | Starts the ConfigMap's key and value section. |
+| `config.yaml` | Creates a key named `config.yaml`. The vertical bar after `config.yaml:` tells Kubernetes to store the indented lines as one block of text. The adapter reads that text as its own YAML document. |
 
-The GitOps source also contains Helm and Argo CD metadata. Helm renders the ConfigMap when `{{` `if` `.Values.agentic.enabled` `}}` evaluates to true and replaces `{{` `.Values.namespace` `}}` with the configured namespace. Argo CD uses `sync-wave:` `"4"` for ordering, while `Prune=false` tells Argo CD to keep this ConfigMap during pruning. The adapter ignores these deployment instructions at runtime.
+</div>
 
 ### The inner `config.yaml`
 
-| Field and EAP value/default | What it controls |
-| --- | --- |
-| `pollInterval` (`30s`) | How often the adapter asks Alertmanager for firing alerts. It controls discovery frequency, not how long analysis takes. |
-| `preRunDelay` (absent; default `0s`) | How long an alert must stay active before a run can be created. The EAP template shows `5m` only as a commented example. A delay can avoid investigating short-lived alerts. |
-| `postRunDelay` (`1h`) | After a matching run becomes Completed, Failed, Denied, or Escalated, waits this long before another run for the same stable fingerprint can be created. |
-| `filtering` (section) | Groups alert-selection settings. |
-| `filtering.allowedReceivers` (empty until the lab enables `critical`) | Case-insensitive allowlist of Alertmanager receiver names. Empty means no runs. If an alert has several receivers, one match is enough. The adapter separately skips alerts whose severity is `none` or `info`. |
-| `deduplication` (optional section) | Groups settings used to decide whether two alert occurrences represent the same underlying problem. |
-| `deduplication.ignoredLabels` (absent; defaults to `pod`, `instance`, `endpoint`, `uid`) | Removes volatile labels before calculating a stable fingerprint. This prevents a restarted pod name from looking like a new problem. A configured list replaces the defaults; `[]` includes every label. |
-| `tools.skills` (absent) | Optional skills shared by all run stages. Each list item needs an OCI `image` and one or more `paths` inside that image. |
-| `agent.default` (absent; resolves to `default`) | Optional agent name for all stages. |
-| `agent.analysis`, `agent.execution`, `agent.verification` (absent) | Optional per-stage agent names. A per-stage value overrides `agent.default`. |
-| `analysis.tools.skills` (one `investigate-alert` skill) | Adds a skill only to the generated run’s analysis step. A per-step tool setting replaces shared tools for that step. |
-| `analysis.tools.skills[].image` (`quay.io/openshiftanalytics/agentic-skills:latest`) | OCI image that contains the skill files. For repeatable environments, a release process should prefer an approved immutable reference over a moving tag. |
-| `analysis.tools.skills[].paths` (`/skills/cluster-troubleshoot/investigate-alert`) | Directory copied or mounted from the skills image for the analysis worker. |
-| `execution.tools.skills`, `verification.tools.skills` (absent) | Optional per-stage skill overrides. The EAP template contains commented examples, so the adapter adds no such override to these stages unless an administrator enables one. |
+<div className="article-table" tabIndex={0} role="region" aria-label="Alerts Adapter settings">
 
-The YAML parser ignores comments beginning with the hash symbol (#). The commented `preRunDelay` example leaves the default delay in place, and the commented `critical` entry leaves that receiver disabled.
+| Field and test value/default | What it controls |
+| --- | --- |
+| `pollInterval` (`30s`) | How often the adapter asks Alertmanager for firing alerts. It does not control how long the investigation takes. |
+| `preRunDelay` (not set; default `0s`) | The minimum time an alert must stay active. The commented `5m` example does not apply. A delay can ignore short alerts. |
+| `postRunDelay` (`1h`) | Waits this long before the same problem can create another run after a run ends. This applies when the earlier run is Completed, Failed, Denied, or Escalated. |
+| `filtering` (section) | Groups alert selection settings. |
+| `filtering.allowedReceivers` (empty until the lab enables `critical`) | Lists the Alertmanager receivers that the adapter accepts. An empty list creates no runs. Letter case does not matter. The adapter also skips severity `none` and `info`. |
+| `deduplication` (optional section) | Groups settings that help the adapter avoid duplicate runs for the same problem. |
+| `deduplication.ignoredLabels` (not set; defaults to `pod`, `instance`, `endpoint`, `uid`) | Leaves changing labels out of the problem identifier. This stops a new pod name from looking like a new problem. Your list replaces the defaults. An empty list (`[]`) uses every label. |
+| `tools.skills` (not set) | Lists skills that all stages can use. Each item needs a container image and one or more paths to skill files in that image. |
+| `agent.default` (not set; uses `default`) | Sets an optional agent name for all stages. |
+| `agent.analysis`, `agent.execution`, `agent.verification` (not set) | Set an optional agent for one stage. A stage setting replaces `agent.default` for that stage. |
+| `analysis.tools.skills` (one `investigate-alert` skill) | Adds the skill only to the analysis stage. A stage tool setting replaces the shared tools for that stage. |
+| `analysis.tools.skills[].image` (`quay.io/openshiftanalytics/agentic-skills:latest`) | Names the container image that holds the skill files. For repeatable results, use a fixed version tag or an exact image digest instead of the moving `latest` tag. |
+| `analysis.tools.skills[].paths` (`/skills/cluster-troubleshoot/investigate-alert`) | Gives the path to the skill directory inside the image. The analysis worker uses files from this directory. |
+| `execution.tools.skills`, `verification.tools.skills` (not set) | Can set different skills for execution or verification. The template shows only commented examples, so these stages get no extra skill unless an administrator enables one. |
+
+</div>
+
+The YAML parser ignores text after a hash symbol (`#`). A commented `preRunDelay` does not change the default delay. A commented `critical` entry does not enable that receiver.
 
 ### How these fields become an AgenticRun
 
-For each eligible alert, the adapter builder performs a predictable translation:
+For each alert that matches its rules, the adapter copies data into an AgenticRun:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Alert to AgenticRun field mapping">
 
 | Input | Generated run field |
 | --- | --- |
-| Alert name, severity, fingerprints, start time, and summary | Run name, labels, and annotations for traceability and deduplication |
+| Alert name, severity, identifiers, start time, and summary | Run name, labels, and annotations. Annotations are extra notes that help you trace the alert and avoid duplicate runs. |
 | Alert `namespace` label | `spec.targetNamespaces`; the `AgenticRun` object itself remains in `openshift-lightspeed` |
-| Alert details | A sanitized `spec.request` asking the analysis agent to investigate |
+| Alert details | A `spec.request` built from the alert details that asks the analysis agent to investigate |
 | `agent.*` | `spec.analysis.agent`, `spec.execution.agent`, and `spec.verification.agent` |
 | Shared `tools.skills` | `spec.tools.skills` |
-| Per-step tool configuration | `spec.analysis.tools`, `spec.execution.tools`, or `spec.verification.tools` |
+| Tool settings for one stage | `spec.analysis.tools`, `spec.execution.tools`, or `spec.verification.tools` |
 
-This `AgenticRun` is the contract between the adapter and the Agentic Operator. The API handoff lets each component evolve without a direct connection and lets you inspect the workflow with Kubernetes tools.
+</div>
 
-## Keep each handoff visible
+The adapter and Agentic Operator use the AgenticRun as their shared work record. They exchange information through the Kubernetes API instead of a direct connection. You can inspect the same record with Kubernetes tools.
 
-Agentic troubleshooting is a chain of visible, controlled handoffs. The adapter decides which alerts can start an investigation, the Kubernetes API carries the work order, and the Agentic Operator coordinates temporary workers. Human approval and Kubernetes RBAC limit the optional change, while a separate verification stage checks whether the system recovered.
+## Final thoughts
 
-Treat this workflow as Early Access. Begin with automatic analysis, review the evidence, and limit remediation to an authorized disposable environment. Follow the [OpenShift 5 Early Access Agentic troubleshooting exercise](https://rhpds.github.io/ocp5-ea-showroom/modules/agentic-troubleshooting.html) to try the complete experience.
+Agentic troubleshooting uses clear handoffs. The Alerts Adapter creates an AgenticRun for a matching alert. The Agentic Operator then manages temporary workers that investigate the problem, apply an approved fix, and check the result. You can inspect each step through Kubernetes objects.
+
+I tested this workflow on OpenShift 5.0.0-ec.6. Review the evidence before approving a fix, and use an environment where you have permission to make and undo changes. Follow the [OpenShift 5 Early Access Agentic troubleshooting exercise](https://rhpds.github.io/ocp5-ea-showroom/modules/agentic-troubleshooting.html) to try the complete workflow.
 
 ## Sources and learn more
 
@@ -425,3 +465,5 @@ Treat this workflow as Early Access. Begin with automatic analysis, review the e
 - [Lightspeed Agentic Operator repository](https://github.com/openshift/lightspeed-agentic-operator)
 - [Lightspeed Agentic Sandbox repository](https://github.com/openshift/lightspeed-agentic-sandbox)
 - [investigate-alert skill](https://github.com/openshift/agentic-skills/tree/main/cluster-troubleshoot/investigate-alert)
+
+*Last updated: 2026-08-17*

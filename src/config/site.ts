@@ -3,7 +3,7 @@ import type { Topic } from '../content.config';
 export const siteConfig = {
   title: 'AI Runs Here',
   subtitle: 'Applied AI on OpenShift',
-  description: 'Practical notes on OpenShift Lightspeed, agentic systems, and MCP.',
+  description: 'Step-by-step notes on OpenShift Lightspeed, Agentic AI, and MCP.',
   navigation: [
     { label: 'Articles', href: '/articles/' }
   ]
@@ -12,23 +12,23 @@ export const siteConfig = {
 export const topicConfig = {
   'openshift-lightspeed': {
     label: 'OpenShift Lightspeed',
-    description: 'AI-assisted help for understanding and operating OpenShift.'
+    description: 'AI help for learning about OpenShift and solving day-to-day problems.'
   },
   'agentic-lightspeed': {
     label: 'Agentic Lightspeed',
-    description: 'Agentic workflows that connect reasoning, tools, and platform context.'
+    description: 'AI workflows that use tools and OpenShift data to investigate problems and complete tasks.'
   },
   'mcp-gateway': {
     label: 'MCP Gateway',
-    description: 'A Kuadrant-based application gateway that handles connectivity and management of MCP servers for MCP clients.'
+    description: 'A Kuadrant-based gateway that connects MCP clients to MCP servers and helps manage those connections.'
   },
   'mcp-server': {
     label: 'MCP Server',
-    description: 'A native Go MCP server that bridges AI assistants to Kubernetes and OpenShift clusters through the Model Context Protocol.'
+    description: 'A Go-based MCP server that lets AI assistants work with Kubernetes and OpenShift clusters through MCP.'
   },
   'mcp-lifecycle-operator': {
     label: 'MCP Lifecycle Operator',
-    description: 'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
+    description: 'A Kubernetes Operator that deploys and manages MCP servers on OpenShift.'
   }
 } satisfies Record<Topic, { label: string; description: string }>;
 

@@ -643,12 +643,25 @@ pre {
   background: var(--ink);
 }
 
-.article-prose table {
-  display: block;
-  width: max-content;
+.article-table {
+  width: 100%;
   max-width: 100%;
   overflow-x: auto;
+}
+
+.article-prose table {
+  width: 100%;
+  overflow-wrap: normal;
   border-collapse: collapse;
+  hyphens: none;
+  table-layout: auto;
+  word-break: normal;
+}
+
+.article-prose table :not(pre) > code {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  word-break: normal;
 }
 
 .article-prose th,
@@ -748,6 +761,56 @@ pre {
 
   .agentic-workflow__label {
     grid-row: auto;
+  }
+
+  .article-table {
+    overflow-x: visible;
+  }
+
+  .article-prose table {
+    display: block;
+    max-width: 100%;
+    min-width: 0;
+    border: 0;
+    table-layout: fixed;
+  }
+
+  .article-prose table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+
+  .article-prose table tbody {
+    display: grid;
+    gap: 0.85rem;
+  }
+
+  .article-prose table tr,
+  .article-prose table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .article-prose table td:first-child {
+    border-bottom: 0;
+    background: var(--chrome);
+    font-weight: 700;
+  }
+
+  .article-prose table td + td {
+    border-top: 0;
+  }
+
+  .article-prose table :not(pre) > code {
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
 }

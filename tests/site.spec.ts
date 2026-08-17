@@ -57,7 +57,7 @@ test('article presents source-backed learning aids as structured content', async
   await expect(page.getByRole('heading', { level: 2, name: 'What you will learn' })).toBeVisible();
   await expect(page.locator('.article-callout--checkpoint')).toHaveCount(3);
   await expect(page.locator('.article-callout--caution')).toContainText(
-    'Enabling a receiver can create runs for multiple eligible alerts.'
+    'Enabling a receiver can create runs for several alerts that match the adapter rules.'
   );
   await expect(page.getByText('OpenShift 5.0.0-ec.6', { exact: true })).toBeVisible();
   await expect(page.locator('.article-callout--important')).toHaveCount(0);
@@ -69,6 +69,15 @@ test('article presents source-backed learning aids as structured content', async
   const workflow = page.getByRole('figure', { name: 'Alert-triggered Agentic troubleshooting flow' });
   await expect(workflow).toBeVisible();
   await expect(workflow.locator('[data-workflow-step]')).toHaveCount(7);
+});
+
+test('failure chain is a readable list instead of a copyable code block', async ({ page }) => {
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  await expect(page.locator('pre').filter({ hasText: 'reporting-service v1.0.2' })).toHaveCount(0);
+  await expect(page.getByRole('listitem').filter({
+    hasText: 'reporting-service v1.0.2 leaks database connections'
+  })).toBeVisible();
 });
 
 test('article exposes its table of contents on mobile without JavaScript', async ({ page }) => {
@@ -203,17 +212,17 @@ test('MCP areas are separate top-level topic pages', async ({ page, request }) =
     [
       'mcp-gateway',
       'MCP Gateway',
-      'A Kuadrant-based application gateway that handles connectivity and management of MCP servers for MCP clients.'
+      'A Kuadrant-based gateway that connects MCP clients to MCP servers and helps manage those connections.'
     ],
     [
       'mcp-server',
       'MCP Server',
-      'A native Go MCP server that bridges AI assistants to Kubernetes and OpenShift clusters through the Model Context Protocol.'
+      'A Go-based MCP server that lets AI assistants work with Kubernetes and OpenShift clusters through MCP.'
     ],
     [
       'mcp-lifecycle-operator',
       'MCP Lifecycle Operator',
-      'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
+      'A Kubernetes Operator that deploys and manages MCP servers on OpenShift.'
     ]
   ] as const) {
     const path = pagePath(`/topics/${slug}/`);
@@ -321,4 +330,63 @@ test('long prose and code tokens stay contained at 320px', async ({ page }) => {
     }, markup);
     expect(widths.page).toBeLessThanOrEqual(widths.viewport);
   }
+});
+
+test('article tables wrap only between words', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  const brokenWords = await page.locator('.article-prose table th, .article-prose table td')
+    .evaluateAll((cells) => cells.flatMap((cell) => {
+      const words: string[] = [];
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      let textNode = walker.nextNode();
+
+      while (textNode) {
+        if (textNode.parentElement?.closest('code')) {
+          textNode = walker.nextNode();
+          continue;
+        }
+        const text = textNode.textContent ?? '';
+        for (const match of text.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(textNode, match.index ?? 0);
+          range.setEnd(textNode, (match.index ?? 0) + match[0].length);
+          const lines = new Set(Array.from(range.getClientRects(), (rect) => Math.round(rect.top)));
+          if (lines.size > 1) words.push(match[0]);
+        }
+        textNode = walker.nextNode();
+      }
+
+      return words;
+    }));
+
+  expect(brokenWords).toEqual([]);
+});
+
+test('article tables stack each field above its explanation on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 800 });
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  const cells = page.locator('.article-prose table').first().locator('tbody tr').first().locator('td');
+  const positions = await cells.evaluateAll((items) => items.map((item) => {
+    const rect = item.getBoundingClientRect();
+    return { top: Math.round(rect.top), bottom: Math.round(rect.bottom), width: Math.round(rect.width) };
+  }));
+
+  expect(positions).toHaveLength(2);
+  expect(positions[1].top).toBeGreaterThanOrEqual(positions[0].bottom - 1);
+  expect(Math.abs(positions[0].width - positions[1].width)).toBeLessThanOrEqual(1);
+});
+
+test('ConfigMap table renders the complete config.yaml explanation', async ({ page }) => {
+  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+
+  const row = page.getByRole('region', { name: 'ConfigMap fields' })
+    .locator('tbody tr')
+    .filter({ hasText: 'config.yaml' });
+
+  await expect(row).toHaveCount(1);
+  await expect(row.locator('td')).toHaveCount(2);
+  await expect(row).toContainText('as its own YAML document.');
 });
