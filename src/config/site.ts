@@ -27,7 +27,7 @@ export const topicConfig = {
     description: 'A native Go MCP server that bridges AI assistants to Kubernetes and OpenShift clusters through the Model Context Protocol.'
   },
   'mcp-lifecycle-operator': {
-    label: 'OpenShift MCP Lifecycle Operator',
+    label: 'MCP Lifecycle Operator',
     description: 'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
   }
 } satisfies Record<Topic, { label: string; description: string }>;

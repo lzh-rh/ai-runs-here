@@ -18,7 +18,7 @@ test('article uses the simple documentation shell', async ({ page }) => {
     'Agentic Lightspeed',
     'MCP Gateway',
     'MCP Server',
-    'OpenShift MCP Lifecycle Operator'
+    'MCP Lifecycle Operator'
   ]) {
     await expect(topicNavigation.getByRole('link', { name, exact: true })).toBeVisible();
   }
@@ -106,7 +106,7 @@ test('MCP topics appear as flat navigation links without parent sections', async
   for (const [name, path] of [
     ['MCP Gateway', '/topics/mcp-gateway/'],
     ['MCP Server', '/topics/mcp-server/'],
-    ['OpenShift MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
+    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(navigation.getByRole('link', { name, exact: true }))
       .toHaveAttribute('href', pagePath(path));
@@ -146,7 +146,7 @@ test('home exposes the two Lightspeed and three MCP topic links', async ({ page 
     ['Agentic Lightspeed', '/topics/agentic-lightspeed/'],
     ['MCP Gateway', '/topics/mcp-gateway/'],
     ['MCP Server', '/topics/mcp-server/'],
-    ['OpenShift MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
+    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(main.getByRole('link', { name, exact: true })).toHaveAttribute('href', pagePath(href));
   }
@@ -212,7 +212,7 @@ test('MCP areas are separate top-level topic pages', async ({ page, request }) =
     ],
     [
       'mcp-lifecycle-operator',
-      'OpenShift MCP Lifecycle Operator',
+      'MCP Lifecycle Operator',
       'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
     ]
   ] as const) {

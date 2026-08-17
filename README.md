@@ -1,6 +1,6 @@
 # AI Runs Here
 
-A personal technical blog about Applied AI on OpenShift. The site contains practical notes and labs for OpenShift Lightspeed, Agentic Lightspeed, MCP Gateway, MCP Server, and OpenShift MCP Lifecycle Operator.
+A personal technical blog about Applied AI on OpenShift. The site contains practical notes and labs for OpenShift Lightspeed, Agentic Lightspeed, MCP Gateway, MCP Server, and MCP Lifecycle Operator.
 
 This is not an official Red Hat website or a statement of Red Hat product support. Validate product behavior against the sources linked in each article.
 
@@ -52,6 +52,12 @@ Available topics are:
 Keep `draft: true` while writing. Set it to `false` when the post is ready. A published lab must include the exact product versions that were tested.
 
 ## Verify
+
+On a new checkout, install the browser engines once:
+
+```bash
+npx playwright install chromium webkit
+```
 
 Before publishing, run:
 
