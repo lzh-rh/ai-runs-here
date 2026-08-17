@@ -1,4 +1,4 @@
-import type { McpLabel, Topic } from '../content.config';
+import type { Topic } from '../content.config';
 
 export const siteConfig = {
   title: 'AI Runs Here',
@@ -18,23 +18,19 @@ export const topicConfig = {
     label: 'Agentic Lightspeed',
     description: 'Agentic workflows that connect reasoning, tools, and platform context.'
   },
-  mcp: {
-    label: 'MCP',
-    description: 'Model Context Protocol servers, gateways, and lifecycle operations.'
+  'mcp-gateway': {
+    label: 'MCP Gateway',
+    description: 'Notes about MCP gateways on OpenShift.'
+  },
+  'mcp-server': {
+    label: 'MCP Server',
+    description: 'Notes about MCP servers on OpenShift.'
+  },
+  'mcp-lifecycle-operator': {
+    label: 'MCP Lifecycle Operator',
+    description: 'Notes about MCP Lifecycle Operator on OpenShift.'
   }
 } satisfies Record<Topic, { label: string; description: string }>;
-
-export const mcpLabelConfig: Record<McpLabel, string> = {
-  'mcp-gateway': 'MCP Gateway',
-  'mcp-server': 'MCP Server',
-  'mcp-lifecycle-operator': 'MCP Lifecycle Operator'
-};
-
-export const mcpTopicDescriptionConfig: Record<McpLabel, string> = {
-  'mcp-gateway': 'Notes about MCP gateways on OpenShift.',
-  'mcp-server': 'Notes about MCP servers on OpenShift.',
-  'mcp-lifecycle-operator': 'Notes about MCP Lifecycle Operator on OpenShift.'
-};
 
 export function withBase(path: string, base = import.meta.env.BASE_URL) {
   const normalizedBase = base.endsWith('/') ? base : `${base}/`;

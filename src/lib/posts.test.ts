@@ -7,8 +7,7 @@ const post = (id: string, overrides: Record<string, unknown> = {}) => ({
     title: id,
     description: `A complete description for ${id}`,
     publishedDate: new Date('2026-01-01'),
-    topic: 'mcp',
-    mcpLabels: [],
+    topic: 'mcp-server',
     tags: [],
     difficulty: 'beginner',
     estimatedMinutes: 10,
@@ -34,18 +33,18 @@ describe('post queries', () => {
   });
 
   it('returns newest posts with the current post topic', () => {
-    const current = post('current', { topic: 'mcp' });
-    const olderMatch = post('older-match', { topic: 'mcp', publishedDate: new Date('2026-02-01') });
-    const newestMatch = post('newest-match', { topic: 'mcp', publishedDate: new Date('2026-03-01') });
+    const current = post('current', { topic: 'mcp-server' });
+    const olderMatch = post('older-match', { topic: 'mcp-server', publishedDate: new Date('2026-02-01') });
+    const newestMatch = post('newest-match', { topic: 'mcp-server', publishedDate: new Date('2026-03-01') });
     const otherTopic = post('other-topic', { topic: 'agentic-lightspeed', publishedDate: new Date('2026-04-01') });
 
     expect(getRelatedPosts([current, olderMatch, otherTopic, newestMatch], 'current')).toEqual([newestMatch, olderMatch]);
   });
 
   it('limits related posts and returns none for an unknown current post', () => {
-    const current = post('current', { topic: 'mcp' });
-    const first = post('first', { topic: 'mcp', publishedDate: new Date('2026-02-01') });
-    const second = post('second', { topic: 'mcp', publishedDate: new Date('2026-03-01') });
+    const current = post('current', { topic: 'mcp-server' });
+    const first = post('first', { topic: 'mcp-server', publishedDate: new Date('2026-02-01') });
+    const second = post('second', { topic: 'mcp-server', publishedDate: new Date('2026-03-01') });
 
     expect(getRelatedPosts([current, first, second], 'current', 1)).toEqual([second]);
     expect(getRelatedPosts([current, first, second], 'missing')).toEqual([]);

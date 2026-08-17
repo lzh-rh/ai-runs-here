@@ -6,8 +6,7 @@ const validLab = {
   title: 'A representative tested lab article',
   description: 'A test fixture with complete lab metadata for schema validation.',
   publishedDate: new Date('2026-07-20'),
-  topic: 'mcp',
-  mcpLabels: ['mcp-gateway'],
+  topic: 'mcp-gateway',
   tags: ['lightspeed', 'gateway'],
   difficulty: 'intermediate',
   estimatedMinutes: 20,
@@ -23,7 +22,6 @@ const base = {
   description: 'A sufficiently complete description for a focused technical field note.',
   publishedDate: new Date('2026-08-17'),
   topic: 'openshift-lightspeed',
-  mcpLabels: [],
   tags: [],
   difficulty: 'beginner',
   estimatedMinutes: 5,
@@ -134,19 +132,21 @@ describe('postSchema', () => {
 });
 
 describe('minimal topic schema', () => {
-  it.each(['openshift-lightspeed', 'agentic-lightspeed', 'mcp'])('accepts topic %s', (topic) => {
+  it.each([
+    'openshift-lightspeed',
+    'agentic-lightspeed',
+    'mcp-gateway',
+    'mcp-server',
+    'mcp-lifecycle-operator'
+  ])('accepts topic %s', (topic) => {
     expect(postSchema.safeParse({ ...base, topic }).success).toBe(true);
   });
 
-  it.each(['openshift-ai', 'agentic-ai', 'lightspeed'])('rejects removed topic %s', (topic) => {
+  it.each(['openshift-ai', 'agentic-ai', 'lightspeed', 'mcp'])('rejects removed topic %s', (topic) => {
     expect(postSchema.safeParse({ ...base, topic }).success).toBe(false);
   });
 
-  it.each(['mcp-gateway', 'mcp-server', 'mcp-lifecycle-operator'])('accepts MCP label %s', (label) => {
-    expect(postSchema.safeParse({ ...base, topic: 'mcp', mcpLabels: [label] }).success).toBe(true);
-  });
-
-  it('rejects MCP labels on a non-MCP post', () => {
+  it('does not accept the removed mcpLabels field', () => {
     expect(postSchema.safeParse({ ...base, mcpLabels: ['mcp-server'] }).success).toBe(false);
   });
 

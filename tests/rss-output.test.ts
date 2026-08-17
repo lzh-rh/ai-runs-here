@@ -12,7 +12,6 @@ vi.mock('../src/lib/post-collection', () => ({
         description: 'Published description',
         publishedDate: new Date('2026-08-17T00:00:00.000Z'),
         topic: 'openshift-lightspeed',
-        mcpLabels: [],
         tags: [],
         difficulty: 'beginner',
         estimatedMinutes: 1,

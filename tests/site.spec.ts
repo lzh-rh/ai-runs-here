@@ -51,13 +51,13 @@ test('MCP topics appear as flat navigation links without parent sections', async
 
   await expect(navigation.getByRole('link', { name: 'MCP', exact: true })).toHaveCount(0);
   await expect(navigation.getByText('MCP topics', { exact: true })).toHaveCount(0);
-  for (const [name, fragment] of [
-    ['MCP Gateway', '#mcp-gateway'],
-    ['MCP Server', '#mcp-server'],
-    ['MCP Lifecycle Operator', '#mcp-lifecycle-operator']
+  for (const [name, path] of [
+    ['MCP Gateway', '/topics/mcp-gateway/'],
+    ['MCP Server', '/topics/mcp-server/'],
+    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(navigation.getByRole('link', { name, exact: true }))
-      .toHaveAttribute('href', `${pagePath('/topics/mcp/')}${fragment}`);
+      .toHaveAttribute('href', pagePath(path));
   }
 });
 
@@ -92,9 +92,9 @@ test('home exposes the two Lightspeed and three MCP topic links', async ({ page 
   for (const [name, href] of [
     ['OpenShift Lightspeed', '/topics/openshift-lightspeed/'],
     ['Agentic Lightspeed', '/topics/agentic-lightspeed/'],
-    ['MCP Gateway', '/topics/mcp/#mcp-gateway'],
-    ['MCP Server', '/topics/mcp/#mcp-server'],
-    ['MCP Lifecycle Operator', '/topics/mcp/#mcp-lifecycle-operator']
+    ['MCP Gateway', '/topics/mcp-gateway/'],
+    ['MCP Server', '/topics/mcp-server/'],
+    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(main.getByRole('link', { name, exact: true })).toHaveAttribute('href', pagePath(href));
   }
@@ -109,7 +109,7 @@ test('deployment routes, metadata, and internal links use the configured base on
   );
 
   for (const path of [
-    '/topics/mcp/',
+    '/topics/mcp-gateway/',
     '/articles/how-agentic-troubleshooting-works-in-openshift/',
     '/rss.xml',
     '/sitemap-index.xml'
@@ -131,7 +131,13 @@ test('deployment routes, metadata, and internal links use the configured base on
 });
 
 test('topic routes show a title and article list or empty state', async ({ page }) => {
-  for (const slug of ['openshift-lightspeed', 'agentic-lightspeed', 'mcp']) {
+  for (const slug of [
+    'openshift-lightspeed',
+    'agentic-lightspeed',
+    'mcp-gateway',
+    'mcp-server',
+    'mcp-lifecycle-operator'
+  ]) {
     await page.goto(pagePath(`/topics/${slug}/`));
     await expect(page.locator('h1')).toHaveCount(1);
     await expect(page.locator(
@@ -140,18 +146,22 @@ test('topic routes show a title and article list or empty state', async ({ page 
   }
 });
 
-test('MCP navigation targets the three topic sections', async ({ page }) => {
-  await page.goto(pagePath('/topics/mcp/'));
-  for (const [name, id, description] of [
-    ['MCP Gateway', 'mcp-gateway', 'Notes about MCP gateways on OpenShift.'],
-    ['MCP Server', 'mcp-server', 'Notes about MCP servers on OpenShift.'],
-    ['MCP Lifecycle Operator', 'mcp-lifecycle-operator', 'Notes about MCP Lifecycle Operator on OpenShift.']
+test('MCP areas are separate top-level topic pages', async ({ page, request }) => {
+  for (const [slug, title, description] of [
+    ['mcp-gateway', 'MCP Gateway', 'Notes about MCP gateways on OpenShift.'],
+    ['mcp-server', 'MCP Server', 'Notes about MCP servers on OpenShift.'],
+    ['mcp-lifecycle-operator', 'MCP Lifecycle Operator', 'Notes about MCP Lifecycle Operator on OpenShift.']
   ] as const) {
-    const section = page.locator(`#${id}`);
-    await expect(section.getByRole('heading', { name, exact: true })).toBeVisible();
-    await expect(section.getByText(description, { exact: true })).toBeVisible();
-    await expect(section.locator('[data-mcp-article-list], [data-mcp-empty]')).toBeVisible();
+    const path = pagePath(`/topics/${slug}/`);
+    expect((await request.get(path)).status(), path).toBe(200);
+    await page.goto(path);
+    await expect(page.getByText('Topic', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: title })).toBeVisible();
+    await expect(page.getByText(description, { exact: true })).toBeVisible();
+    await expect(page.locator('[data-topic-article-list], [data-topic-empty]')).toBeVisible();
   }
+
+  expect((await request.get(pagePath('/topics/mcp/'))).status()).toBe(404);
 });
 
 test('published output includes the Agentic lab and excludes the draft', async ({ page, request }) => {
@@ -208,7 +218,7 @@ test('removed route and integrations are absent', async ({ page, request }) => {
 test('core pages have no serious accessibility violations', async ({ page }) => {
   for (const path of [
     '/', '/articles/', '/topics/openshift-lightspeed/', '/topics/agentic-lightspeed/',
-    '/topics/mcp/', '/articles/how-agentic-troubleshooting-works-in-openshift/'
+    '/topics/mcp-gateway/', '/articles/how-agentic-troubleshooting-works-in-openshift/'
   ]) {
     await page.goto(pagePath(path));
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -228,7 +238,7 @@ test('keyboard users can reach main content', async ({ browserName, page }) => {
 test('key pages do not overflow at common widths', async ({ page }) => {
   for (const width of [320, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const path of ['/', '/topics/mcp/', '/articles/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
+    for (const path of ['/', '/topics/mcp-gateway/', '/articles/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
       await page.goto(pagePath(path));
       const widths = await page.evaluate(() => ({
         viewport: document.documentElement.clientWidth,

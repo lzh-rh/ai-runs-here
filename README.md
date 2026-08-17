@@ -16,23 +16,19 @@ npm run dev
 
 Open the URL printed by Astro. With the example values unchanged, use `http://localhost:4321/repository-name/`; replace both placeholders before a real deployment. Keep `.env` local; commit only `.env.example`.
 
-## Content topics and MCP labels
+## Content topics
 
 Posts live in `src/content/posts/` as Markdown or MDX. Use one of these topic slugs:
 
 - `openshift-lightspeed` — OpenShift Lightspeed
 - `agentic-lightspeed` — Agentic Lightspeed
-- `mcp` — MCP
-
-Only an MCP post may use `mcpLabels`. Its allowed values are:
-
 - `mcp-gateway` — MCP Gateway
 - `mcp-server` — MCP Server
 - `mcp-lifecycle-operator` — MCP Lifecycle Operator
 
-Use `mcpLabels: []` for a non-MCP post. The content schema rejects unknown topics or labels and rejects MCP labels on another topic.
+The content schema rejects unknown topics. Each post belongs to one topic, including each MCP area as a separate top-level topic.
 
-## Frontmatter template with `mcpLabels`
+## Frontmatter template
 
 Start a new post as a draft. This example makes no claim that a product workflow was tested:
 
@@ -43,9 +39,7 @@ title: "Plan an MCP experiment on OpenShift"
 description: "A field-note template for recording an MCP experiment without claiming an unverified result."
 publishedDate: 2026-08-17
 updatedDate: 2026-08-17
-topic: mcp
-mcpLabels:
-  - mcp-server
+topic: mcp-server
 tags:
   - experiment
 difficulty: beginner

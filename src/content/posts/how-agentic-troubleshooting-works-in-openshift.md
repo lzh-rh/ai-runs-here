@@ -5,7 +5,6 @@ description: Follow an OpenShift alert through Agentic analysis, approval-gated 
 publishedDate: 2026-08-17
 updatedDate: 2026-08-17
 topic: agentic-lightspeed
-mcpLabels: []
 tags:
   - OpenShift
   - OpenShift Lightspeed

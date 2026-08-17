@@ -1,13 +1,8 @@
 ---
-import type { McpLabel, Topic } from '../../content.config';
+import type { Topic } from '../../content.config';
 import { topics } from '../../content.config';
 import PostCard from '../../components/PostCard.astro';
-import {
-  mcpLabelConfig,
-  mcpTopicDescriptionConfig,
-  topicConfig,
-  withBase
-} from '../../config/site';
+import { topicConfig, withBase } from '../../config/site';
 import BaseLayout from '../../layouts/BaseLayout.astro';
 import { getPostCollection } from '../../lib/post-collection';
 import { isPublished, sortNewest } from '../../lib/posts';
@@ -28,15 +23,6 @@ const posts = sortNewest(
     (post) => post.data.topic === topic && isPublished(post, mode)
   )
 );
-const mcpSections = Object.entries(mcpLabelConfig).map(([slug, label]) => {
-  const mcpLabel = slug as McpLabel;
-  return {
-    slug: mcpLabel,
-    label,
-    description: mcpTopicDescriptionConfig[mcpLabel],
-    posts: posts.filter((post) => post.data.mcpLabels.includes(mcpLabel))
-  };
-});
 ---
 
 <BaseLayout title={config.label} description={config.description}>
@@ -48,35 +34,15 @@ const mcpSections = Object.entries(mcpLabelConfig).map(([slug, label]) => {
       <p class="lead">{config.description}</p>
     </header>
 
-    {topic === 'mcp' && (
-      <div class="mcp-sections">
-        {mcpSections.map((section) => (
-          <section id={section.slug}>
-            <h2>{section.label}</h2>
-            <p>{section.description}</p>
-            {section.posts.length > 0 ? (
-              <div class="article-list" data-mcp-article-list>
-                {section.posts.map((post) => <PostCard post={post} />)}
-              </div>
-            ) : (
-              <p data-mcp-empty>Articles are coming.</p>
-            )}
-          </section>
-        ))}
-      </div>
-    )}
-
-    {topic !== 'mcp' && (
-      <section aria-labelledby="topic-articles-title">
-        <h2 id="topic-articles-title">Articles</h2>
-        {posts.length > 0 ? (
-          <div class="article-list" data-topic-article-list>
-            {posts.map((post) => <PostCard post={post} />)}
-          </div>
-        ) : (
-          <p data-topic-empty>Articles are coming.</p>
-        )}
-      </section>
-    )}
+    <section aria-labelledby="topic-articles-title">
+      <h2 id="topic-articles-title">Articles</h2>
+      {posts.length > 0 ? (
+        <div class="article-list" data-topic-article-list>
+          {posts.map((post) => <PostCard post={post} />)}
+        </div>
+      ) : (
+        <p data-topic-empty>Articles are coming.</p>
+      )}
+    </section>
   </article>
 </BaseLayout>
