@@ -22,6 +22,12 @@ describe('GitHub Pages base path', () => {
   it.each(['//evil.example', '/repo?x=1', '/repo#frag', '/repo/../admin'])('rejects %s', (input) => {
     expect(() => resolveBasePath(input)).toThrow(/base path/i);
   });
+
+  it('installs every browser engine used by the deployment test projects', () => {
+    const workflow = source('.github/workflows/deploy-pages.yml');
+
+    expect(workflow).toContain('npx playwright install --with-deps chromium webkit');
+  });
 });
 
 describe('publication boundaries and truthful content', () => {
