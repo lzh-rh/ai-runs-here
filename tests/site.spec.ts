@@ -18,7 +18,7 @@ test('article uses the simple documentation shell', async ({ page }) => {
     'Agentic Lightspeed',
     'MCP Gateway',
     'MCP Server',
-    'MCP Lifecycle Operator'
+    'OpenShift MCP Lifecycle Operator'
   ]) {
     await expect(topicNavigation.getByRole('link', { name, exact: true })).toBeVisible();
   }
@@ -54,7 +54,7 @@ test('MCP topics appear as flat navigation links without parent sections', async
   for (const [name, path] of [
     ['MCP Gateway', '/topics/mcp-gateway/'],
     ['MCP Server', '/topics/mcp-server/'],
-    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
+    ['OpenShift MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(navigation.getByRole('link', { name, exact: true }))
       .toHaveAttribute('href', pagePath(path));
@@ -94,7 +94,7 @@ test('home exposes the two Lightspeed and three MCP topic links', async ({ page 
     ['Agentic Lightspeed', '/topics/agentic-lightspeed/'],
     ['MCP Gateway', '/topics/mcp-gateway/'],
     ['MCP Server', '/topics/mcp-server/'],
-    ['MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
+    ['OpenShift MCP Lifecycle Operator', '/topics/mcp-lifecycle-operator/']
   ] as const) {
     await expect(main.getByRole('link', { name, exact: true })).toHaveAttribute('href', pagePath(href));
   }
@@ -148,9 +148,21 @@ test('topic routes show a title and article list or empty state', async ({ page 
 
 test('MCP areas are separate top-level topic pages', async ({ page, request }) => {
   for (const [slug, title, description] of [
-    ['mcp-gateway', 'MCP Gateway', 'Notes about MCP gateways on OpenShift.'],
-    ['mcp-server', 'MCP Server', 'Notes about MCP servers on OpenShift.'],
-    ['mcp-lifecycle-operator', 'MCP Lifecycle Operator', 'Notes about MCP Lifecycle Operator on OpenShift.']
+    [
+      'mcp-gateway',
+      'MCP Gateway',
+      'A Kuadrant-based application gateway that handles connectivity and management of MCP servers for MCP clients.'
+    ],
+    [
+      'mcp-server',
+      'MCP Server',
+      'A native Go MCP server that bridges AI assistants to Kubernetes and OpenShift clusters through the Model Context Protocol.'
+    ],
+    [
+      'mcp-lifecycle-operator',
+      'OpenShift MCP Lifecycle Operator',
+      'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
+    ]
   ] as const) {
     const path = pagePath(`/topics/${slug}/`);
     expect((await request.get(path)).status(), path).toBe(200);

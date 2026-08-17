@@ -20,15 +20,15 @@ export const topicConfig = {
   },
   'mcp-gateway': {
     label: 'MCP Gateway',
-    description: 'Notes about MCP gateways on OpenShift.'
+    description: 'A Kuadrant-based application gateway that handles connectivity and management of MCP servers for MCP clients.'
   },
   'mcp-server': {
     label: 'MCP Server',
-    description: 'Notes about MCP servers on OpenShift.'
+    description: 'A native Go MCP server that bridges AI assistants to Kubernetes and OpenShift clusters through the Model Context Protocol.'
   },
   'mcp-lifecycle-operator': {
-    label: 'MCP Lifecycle Operator',
-    description: 'Notes about MCP Lifecycle Operator on OpenShift.'
+    label: 'OpenShift MCP Lifecycle Operator',
+    description: 'A Kubernetes-native operator that manages the deployment and lifecycle of MCP servers on OpenShift.'
   }
 } satisfies Record<Topic, { label: string; description: string }>;
 

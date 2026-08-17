@@ -24,7 +24,7 @@ Posts live in `src/content/posts/` as Markdown or MDX. Use one of these topic sl
 - `agentic-lightspeed` — Agentic Lightspeed
 - `mcp-gateway` — MCP Gateway
 - `mcp-server` — MCP Server
-- `mcp-lifecycle-operator` — MCP Lifecycle Operator
+- `mcp-lifecycle-operator` — OpenShift MCP Lifecycle Operator
 
 The content schema rejects unknown topics. Each post belongs to one topic, including each MCP area as a separate top-level topic.
 
