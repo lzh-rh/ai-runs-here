@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRelatedPosts, isPublished, sortNewest } from './posts';
+import { isPublished, sortNewest } from './posts';
 
 const post = (id: string, overrides: Record<string, unknown> = {}) => ({
   id,
@@ -32,21 +32,4 @@ describe('post queries', () => {
     expect(sortNewest([older, newer]).map((item) => item.id)).toEqual(['newer', 'older']);
   });
 
-  it('returns newest posts with the current post topic', () => {
-    const current = post('current', { topic: 'mcp-server' });
-    const olderMatch = post('older-match', { topic: 'mcp-server', publishedDate: new Date('2026-02-01') });
-    const newestMatch = post('newest-match', { topic: 'mcp-server', publishedDate: new Date('2026-03-01') });
-    const otherTopic = post('other-topic', { topic: 'agentic-lightspeed', publishedDate: new Date('2026-04-01') });
-
-    expect(getRelatedPosts([current, olderMatch, otherTopic, newestMatch], 'current')).toEqual([newestMatch, olderMatch]);
-  });
-
-  it('limits related posts and returns none for an unknown current post', () => {
-    const current = post('current', { topic: 'mcp-server' });
-    const first = post('first', { topic: 'mcp-server', publishedDate: new Date('2026-02-01') });
-    const second = post('second', { topic: 'mcp-server', publishedDate: new Date('2026-03-01') });
-
-    expect(getRelatedPosts([current, first, second], 'current', 1)).toEqual([second]);
-    expect(getRelatedPosts([current, first, second], 'missing')).toEqual([]);
-  });
 });

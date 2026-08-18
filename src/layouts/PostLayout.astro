@@ -1,10 +1,8 @@
 ---
 import type { MarkdownHeading } from 'astro';
 import CodeCopy from '../components/CodeCopy.astro';
-import PostCard from '../components/PostCard.astro';
 import { topicConfig, withBase } from '../config/site';
-import { getPostCollection } from '../lib/post-collection';
-import { getRelatedPosts, isPublished, type Post } from '../lib/posts';
+import { type Post } from '../lib/posts';
 import BaseLayout from './BaseLayout.astro';
 
 interface Props {
@@ -14,11 +12,6 @@ interface Props {
 
 const { post, headings } = Astro.props;
 const tableOfContents = headings.filter(({ depth }) => depth === 2 || depth === 3);
-const mode = import.meta.env.PROD ? 'production' : 'development';
-const relatedPosts = getRelatedPosts(
-  (await getPostCollection()).filter((candidate) => isPublished(candidate, mode)),
-  post.id
-);
 const topic = topicConfig[post.data.topic];
 const showEnvironment = post.data.testedVersions.length > 0;
 const showPrerequisites = post.data.prerequisites.length > 0;
@@ -100,13 +93,6 @@ const formatDate = (date: Date) =>
       <slot />
     </div>
   </article>
-
-  {relatedPosts.length > 0 && (
-    <section class="related-posts" aria-labelledby="related-posts-title">
-      <h2 id="related-posts-title">Related articles</h2>
-      <div class="article-list">{relatedPosts.map((relatedPost) => <PostCard post={relatedPost} />)}</div>
-    </section>
-  )}
 
   <CodeCopy />
 </BaseLayout>

@@ -37,8 +37,7 @@ describe('publication boundaries and truthful content', () => {
       'src/pages/index.astro',
       'src/pages/articles/[id].astro',
       'src/pages/articles/index.astro',
-      'src/pages/rss.xml.ts',
-      'src/layouts/PostLayout.astro'
+      'src/pages/rss.xml.ts'
     ]) {
       expect(source(file), file).toContain('getPostCollection');
     }
@@ -47,8 +46,7 @@ describe('publication boundaries and truthful content', () => {
   it('uses the current build mode for every preview-facing post query', () => {
     for (const page of [
       'src/pages/articles/[id].astro',
-      'src/pages/articles/index.astro',
-      'src/layouts/PostLayout.astro'
+      'src/pages/articles/index.astro'
     ]) {
       const contents = source(page);
       expect(contents, page).toContain("import.meta.env.PROD ? 'production' : 'development'");
@@ -56,13 +54,17 @@ describe('publication boundaries and truthful content', () => {
     }
   });
 
-  it('publishes the verified Agentic lab', () => {
-    const articlePath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.mdx';
+  it('publishes the general Agentic troubleshooting guide and keeps the lab as a draft', () => {
+    const guidePath = 'src/content/posts/understanding-agentic-troubleshooting-in-openshift.mdx';
+    const labPath = 'src/content/posts/how-agentic-troubleshooting-works-in-openshift.mdx';
 
-    expect(existsSync(pathFromRoot(articlePath)), 'the verified Agentic lab should exist').toBe(true);
-    if (existsSync(pathFromRoot(articlePath))) {
-      expect(source(articlePath)).toMatch(/\ndraft: false\n/);
-      expect(source(articlePath)).toMatch(/\nkind: lab\n/);
+    expect(existsSync(pathFromRoot(guidePath)), 'the general Agentic guide should exist').toBe(true);
+    expect(existsSync(pathFromRoot(labPath)), 'the original Agentic lab should remain available locally').toBe(true);
+    if (existsSync(pathFromRoot(guidePath)) && existsSync(pathFromRoot(labPath))) {
+      expect(source(guidePath)).toMatch(/\ndraft: false\n/);
+      expect(source(guidePath)).toMatch(/\nkind: guide\n/);
+      expect(source(labPath)).toMatch(/\ndraft: true\n/);
+      expect(source(labPath)).toMatch(/\nkind: lab\n/);
     }
   });
 });
@@ -81,8 +83,8 @@ describe('reviewed interface contracts', () => {
     expect(text).not.toMatch(new RegExp(removedTerms.join('|'), 'i'));
   });
 
-  it('includes a representative published article in the axe route loop', () => {
-    expect(source('tests/site.spec.ts')).toContain("'/articles/how-agentic-troubleshooting-works-in-openshift/'");
+  it('includes the published guide in the axe route loop', () => {
+    expect(source('tests/site.spec.ts')).toContain("'/articles/understanding-agentic-troubleshooting-in-openshift/'");
   });
 });
 

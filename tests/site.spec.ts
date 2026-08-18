@@ -6,10 +6,12 @@ const browserBasePath = resolveBasePath(
   process.env.PLAYWRIGHT_BASE_PATH ?? process.env.PUBLIC_BASE_PATH
 );
 const pagePath = (path = '/') => `${browserBasePath}${path.replace(/^\/+/, '')}`;
+const publishedArticlePath = '/articles/understanding-agentic-troubleshooting-in-openshift/';
+const publishedArticleTitle = 'Understanding agentic troubleshooting in OpenShift';
 
 test('article uses the simple documentation shell', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   await expect(page.getByRole('banner').getByText('AI Runs Here')).toBeVisible();
   const topicNavigation = page.getByRole('navigation', { name: 'Topic navigation' }).first();
@@ -24,11 +26,10 @@ test('article uses the simple documentation shell', async ({ page }) => {
   }
 
   const contents = page.getByRole('navigation', { name: 'On this page' });
-  await expect(contents.getByRole('link', { name: 'Prepare your environment' }))
-    .toHaveAttribute('href', '#prepare-your-environment');
-  await expect(page.locator('.docs-content article h1')).toHaveText(
-    'How Agentic troubleshooting works in OpenShift'
-  );
+  await expect(contents.getByRole('link', { name: 'What you will learn' }))
+    .toHaveAttribute('href', '#what-you-will-learn');
+  await expect(page.locator('.docs-content article h1')).toHaveText(publishedArticleTitle);
+  await expect(page.getByRole('heading', { name: 'Related articles' })).toHaveCount(0);
 });
 
 test('header uses the supplied Red Hat identity pattern', async ({ page }) => {
@@ -52,19 +53,12 @@ test('pages omit the visible publication footer', async ({ page }) => {
 });
 
 test('article presents source-backed learning aids as structured content', async ({ page }) => {
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   await expect(page.getByRole('heading', { level: 2, name: 'What you will learn' })).toBeVisible();
-  await expect(page.locator('.article-callout--checkpoint')).toHaveCount(3);
-  await expect(page.locator('.article-callout--caution')).toContainText(
-    'Enabling a receiver can create runs for several alerts that match the adapter rules.'
-  );
-  await expect(page.getByText('OpenShift 5.0.0-ec.6', { exact: true })).toBeVisible();
-  await expect(page.locator('.article-callout--important')).toHaveCount(0);
-  await expect(
-    page.getByRole('link', { name: 'investigate-alert', exact: true }).locator('code')
-  ).toHaveCount(0);
-  await expect(page.locator('strong code').filter({ hasText: 'AgenticRun' })).toHaveCount(0);
+  await expect(page.locator('.article-callout--important')).toContainText('Start with your own evidence');
+  await expect(page.locator('.article-callout--checkpoint, .article-callout--caution')).toHaveCount(0);
+  await expect(page.getByText('OpenShift 5.0.0-ec.6', { exact: true })).toHaveCount(0);
 
   const workflow = page.getByRole('figure', { name: 'Alert-triggered Agentic troubleshooting flow' });
   await expect(workflow).toBeVisible();
@@ -72,14 +66,14 @@ test('article presents source-backed learning aids as structured content', async
 });
 
 test('failure chain is a connected cause-and-effect flow', async ({ page }) => {
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   await expect(page.locator('pre').filter({ hasText: 'reporting-service v1.0.2' })).toHaveCount(0);
-  const chain = page.getByRole('list', { name: 'Expected failure chain' });
+  const chain = page.getByRole('list', { name: 'Illustrative service error-rate alert flow' });
   const steps = chain.getByRole('listitem');
   await expect(chain).toBeVisible();
-  await expect(steps).toHaveCount(5);
-  await expect(steps.locator('strong')).toHaveCount(5);
+  await expect(steps).toHaveCount(4);
+  await expect(steps.locator('strong')).toHaveCount(3);
 
   const presentation = await steps.evaluateAll((items) => items.map((item) => ({
     top: Math.round(item.getBoundingClientRect().top),
@@ -87,7 +81,7 @@ test('failure chain is a connected cause-and-effect flow', async ({ page }) => {
   })));
 
   expect(presentation.slice(0, -1).map(({ arrow }) => arrow)).toEqual([
-    '"↓"', '"↓"', '"↓"', '"↓"'
+    '"↓"', '"↓"', '"↓"'
   ]);
   expect(presentation.at(-1)?.arrow).toBe('none');
   expect(presentation.map(({ top }) => top)).toEqual([...presentation]
@@ -97,14 +91,14 @@ test('failure chain is a connected cause-and-effect flow', async ({ page }) => {
 
 test('article exposes its table of contents on mobile without JavaScript', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   const disclosure = page.locator('details.article-toc-mobile');
   await expect(disclosure).toBeVisible();
   await expect(disclosure).not.toHaveAttribute('open', '');
   await disclosure.locator('summary').click();
-  await expect(disclosure.getByRole('link', { name: 'Prepare your environment' }))
-    .toHaveAttribute('href', '#prepare-your-environment');
+  await expect(disclosure.getByRole('link', { name: 'What you will learn' }))
+    .toHaveAttribute('href', '#what-you-will-learn');
 });
 
 test('mobile uses native topic disclosure without a scripted menu', async ({ page }) => {
@@ -141,7 +135,7 @@ test('articles page is a plain chronological list without search', async ({ page
   await page.goto(pagePath('/articles/'));
   await expect(page.locator('h1')).toHaveText('Articles');
   await expect(page.getByRole('searchbox')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'How Agentic troubleshooting works in OpenShift' })).toBeVisible();
+  await expect(page.getByRole('link', { name: publishedArticleTitle })).toBeVisible();
 });
 
 test('About section and route are removed', async ({ page, request }) => {
@@ -186,14 +180,14 @@ test('deployment routes, metadata, and internal links use the configured base on
 
   for (const path of [
     '/topics/mcp-gateway/',
-    '/articles/how-agentic-troubleshooting-works-in-openshift/',
+    publishedArticlePath,
     '/rss.xml',
     '/sitemap-index.xml'
   ]) {
     expect((await request.get(pagePath(path))).status(), path).toBe(200);
   }
 
-  for (const path of ['/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
+  for (const path of ['/', publishedArticlePath]) {
     await page.goto(pagePath(path));
     const internalLinks = await page.locator('a[href^="/"]').evaluateAll((links) =>
       links.map((link) => link.getAttribute('href')).filter((href): href is string => Boolean(href))
@@ -252,38 +246,38 @@ test('MCP areas are separate top-level topic pages', async ({ page, request }) =
   expect((await request.get(pagePath('/topics/mcp/'))).status()).toBe(404);
 });
 
-test('published output includes the Agentic lab', async ({ page }) => {
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+test('published output includes the general Agentic troubleshooting guide', async ({ page }) => {
+  await page.goto(pagePath(publishedArticlePath));
   await expect(page.getByRole('heading', {
     level: 1,
-    name: 'How Agentic troubleshooting works in OpenShift'
+    name: publishedArticleTitle
   })).toBeVisible();
 });
 
-test('Agentic troubleshooting is the first published blog article', async ({ page, request }) => {
-  const articlePath = pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/');
+test('Agentic troubleshooting guide is the published blog article', async ({ page, request }) => {
+  const articlePath = pagePath(publishedArticlePath);
   await page.goto(articlePath);
   await expect(page.getByRole('heading', {
     level: 1,
-    name: 'How Agentic troubleshooting works in OpenShift'
+    name: publishedArticleTitle
   })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Prepare your environment' }))
-    .toHaveAttribute('id', 'prepare-your-environment');
+  await expect(page.getByRole('heading', { name: 'What you will learn' }))
+    .toHaveAttribute('id', 'what-you-will-learn');
   if ((page.viewportSize()?.width ?? 0) >= 1024) {
     await expect(page.getByRole('navigation', { name: 'On this page' })
-      .getByRole('link', { name: 'Prepare your environment' }))
-      .toHaveAttribute('href', '#prepare-your-environment');
+      .getByRole('link', { name: 'What you will learn' }))
+      .toHaveAttribute('href', '#what-you-will-learn');
   }
 
   await page.goto(pagePath('/articles/'));
-  await expect(page.getByRole('link', { name: 'How Agentic troubleshooting works in OpenShift' }))
+  await expect(page.getByRole('link', { name: publishedArticleTitle }))
     .toHaveAttribute('href', articlePath);
   expect((await request.get(pagePath('/articles/start-learning-applied-ai-on-openshift/'))).status())
     .toBe(404);
 });
 
 test('RSS and sitemap expose only published routes', async ({ request }) => {
-  const published = pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/');
+  const published = pagePath(publishedArticlePath);
   const rss = await request.get(pagePath('/rss.xml'));
   expect(rss.status()).toBe(200);
   expect(await rss.text()).toContain(published);
@@ -294,7 +288,7 @@ test('RSS and sitemap expose only published routes', async ({ request }) => {
 test('removed route and integrations are absent', async ({ page, request }) => {
   const removedRoute = `/${['learning', 'paths'].join('-')}/`;
   expect((await request.get(pagePath(removedRoute))).status()).toBe(404);
-  for (const path of ['/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
+  for (const path of ['/', publishedArticlePath]) {
     await page.goto(pagePath(path));
     await expect(page.locator('form, iframe')).toHaveCount(0);
   }
@@ -303,7 +297,7 @@ test('removed route and integrations are absent', async ({ page, request }) => {
 test('core pages have no serious accessibility violations', async ({ page }) => {
   for (const path of [
     '/', '/articles/', '/topics/openshift-lightspeed/', '/topics/agentic-lightspeed/',
-    '/topics/mcp-gateway/', '/articles/how-agentic-troubleshooting-works-in-openshift/'
+    '/topics/mcp-gateway/', publishedArticlePath
   ]) {
     await page.goto(pagePath(path));
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa']).analyze();
@@ -323,7 +317,7 @@ test('keyboard users can reach main content', async ({ browserName, page }) => {
 test('key pages do not overflow at common widths', async ({ page }) => {
   for (const width of [320, 768, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    for (const path of ['/', '/topics/mcp-gateway/', '/articles/', '/articles/how-agentic-troubleshooting-works-in-openshift/']) {
+    for (const path of ['/', '/topics/mcp-gateway/', '/articles/', publishedArticlePath]) {
       await page.goto(pagePath(path));
       const widths = await page.evaluate(() => ({
         viewport: document.documentElement.clientWidth,
@@ -336,7 +330,7 @@ test('key pages do not overflow at common widths', async ({ page }) => {
 
 test('long prose and code tokens stay contained at 320px', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
   const token = 'x'.repeat(426);
   for (const markup of [`<p>${token}</p>`, `<p><code>${token}</code></p>`, `<pre><code>${token}</code></pre>`]) {
     const widths = await page.locator('.article-prose').evaluate((prose, html) => {
@@ -349,7 +343,7 @@ test('long prose and code tokens stay contained at 320px', async ({ page }) => {
 
 test('article tables wrap only between words', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   const brokenWords = await page.locator('.article-prose table th, .article-prose table td')
     .evaluateAll((cells) => cells.flatMap((cell) => {
@@ -381,7 +375,7 @@ test('article tables wrap only between words', async ({ page }) => {
 
 test('article tables stack each field above its explanation on narrow screens', async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 800 });
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+  await page.goto(pagePath(publishedArticlePath));
 
   const cells = page.locator('.article-prose table').first().locator('tbody tr').first().locator('td');
   const positions = await cells.evaluateAll((items) => items.map((item) => {
@@ -394,14 +388,14 @@ test('article tables stack each field above its explanation on narrow screens', 
   expect(Math.abs(positions[0].width - positions[1].width)).toBeLessThanOrEqual(1);
 });
 
-test('ConfigMap table renders the complete config.yaml explanation', async ({ page }) => {
-  await page.goto(pagePath('/articles/how-agentic-troubleshooting-works-in-openshift/'));
+test('ConfigMap table renders the config.yaml explanation', async ({ page }) => {
+  await page.goto(pagePath(publishedArticlePath));
 
-  const row = page.getByRole('region', { name: 'ConfigMap fields' })
+  const row = page.getByRole('region', { name: 'Outer ConfigMap fields' })
     .locator('tbody tr')
     .filter({ hasText: 'config.yaml' });
 
   await expect(row).toHaveCount(1);
   await expect(row.locator('td')).toHaveCount(2);
-  await expect(row).toContainText('as its own YAML document.');
+  await expect(row).toContainText('one block of text.');
 });

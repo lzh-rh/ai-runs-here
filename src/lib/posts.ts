@@ -21,11 +21,3 @@ export function getFeaturedPost(posts: Post[]) {
 export function validatePostCollection(posts: Post[]) {
   return posts;
 }
-
-export function getRelatedPosts(posts: Post[], currentId: string, limit = 3) {
-  const current = posts.find((post) => post.id === currentId);
-  if (!current) return [];
-  return sortNewest(posts)
-    .filter((post) => post.id !== currentId && post.data.topic === current.data.topic)
-    .slice(0, limit);
-}
