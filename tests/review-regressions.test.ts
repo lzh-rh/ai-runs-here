@@ -23,11 +23,10 @@ describe('GitHub Pages base path', () => {
     expect(() => resolveBasePath(input)).toThrow(/base path/i);
   });
 
-  it('installs Chromium for the deployment test projects', () => {
+  it('installs the browsers required by the deployment test projects', () => {
     const workflow = source('.github/workflows/deploy-pages.yml');
 
-    expect(workflow).toContain('npx playwright install --with-deps chromium');
-    expect(workflow).not.toContain('npx playwright install --with-deps chromium webkit');
+    expect(workflow).toContain('npx playwright install --with-deps chromium webkit');
   });
 
 });
