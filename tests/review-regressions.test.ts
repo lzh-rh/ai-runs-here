@@ -23,12 +23,14 @@ describe('GitHub Pages base path', () => {
     expect(() => resolveBasePath(input)).toThrow(/base path/i);
   });
 
-  it('installs the browsers required by the deployment test projects', () => {
+  it('pins the CI browser image to the installed Playwright version', () => {
     const workflow = source('.github/workflows/deploy-pages.yml');
+    const lockfile = JSON.parse(source('package-lock.json'));
+    const playwrightVersion = lockfile.packages['node_modules/@playwright/test'].version;
 
-    expect(workflow).toContain('npx playwright install --with-deps chromium webkit');
+    expect(workflow).toContain(`image: mcr.microsoft.com/playwright:v${playwrightVersion}-noble`);
+    expect(workflow).not.toContain('playwright install');
   });
-
 });
 
 describe('publication boundaries and truthful content', () => {
