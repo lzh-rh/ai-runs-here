@@ -65,6 +65,27 @@ test('article presents source-backed learning aids as structured content', async
   await expect(workflow.locator('[data-workflow-step]')).toHaveCount(7);
 });
 
+test('article numbers the workflow components in the article and contents', async ({ page }) => {
+  await page.goto(pagePath(publishedArticlePath));
+
+  const components = [
+    ['1. Alertmanager: route an alert to a receiver', '#1-alertmanager-route-an-alert-to-a-receiver'],
+    ['2. Agentic Alerts Adapter: the translator', '#2-agentic-alerts-adapter-the-translator'],
+    ['3. AgenticRun: the shared work order', '#3-agenticrun-the-shared-work-order'],
+    ['4. Lightspeed Agentic Operator: the coordinator', '#4-lightspeed-agentic-operator-the-coordinator'],
+    ['5. ApprovalPolicy: the decision gate', '#5-approvalpolicy-the-decision-gate'],
+    ['6. Sandbox workers: the temporary stage workers', '#6-sandbox-workers-the-temporary-stage-workers']
+  ];
+
+  await expect(page.getByRole('heading', { level: 2, name: 'Meet the workflow components' })).toBeVisible();
+  const contents = page.locator('.contents-nav');
+  for (const [name, href] of components) {
+    await expect(page.getByRole('heading', { level: 3, name, exact: true })).toBeVisible();
+    await expect(contents.getByRole('link', { name, exact: true, includeHidden: true })).toHaveAttribute('href', href);
+  }
+  await expect(page.getByRole('heading', { level: 2, name: 'Read the same alert from start to finish' })).toHaveCount(0);
+});
+
 test('failure chain is a connected cause-and-effect flow', async ({ page }) => {
   await page.goto(pagePath(publishedArticlePath));
 

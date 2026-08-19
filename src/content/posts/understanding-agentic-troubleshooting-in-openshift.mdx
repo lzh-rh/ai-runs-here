@@ -69,7 +69,11 @@ Each sandbox returns a result for its stage. The Operator saves those results an
 
 The Adapter creates the work order in the Kubernetes API. The Operator watches the work order and creates the sandbox Pods. The Adapter and the sandbox Pods do not need a direct connection because they share information through the API.
 
-### Alertmanager: route an alert to a receiver
+## Meet the workflow components
+
+The next six sections explain what each component does and where its responsibility ends.
+
+### 1. Alertmanager: route an alert to a receiver
 
 Alertmanager receives firing alerts and evaluates routing rules. A rule can use an alert label, such as `severity`, to select a named receiver.
 
@@ -90,7 +94,7 @@ In this example, `severity="critical"` is the matching condition. `your-alert-re
 
 The Alerts Adapter later compares that receiver name with `filtering.allowedReceivers`. Replace `your-alert-receiver` in both places with a receiver name from your own Alertmanager routing configuration.
 
-### Agentic Alerts Adapter: the translator
+### 2. Agentic Alerts Adapter: the translator
 
 Think of the Alerts Adapter as an intake clerk. It:
 
@@ -214,7 +218,7 @@ data:
 
 When these settings are omitted, the Adapter polls every 30 seconds, uses no pre-run delay, and uses a one-hour post-run delay. This example keeps the polling and post-run defaults but changes the pre-run delay to two minutes. The Adapter checks the Kubernetes API for existing runs on every poll, so it does not need its own database.
 
-### AgenticRun: the shared work order
+### 3. AgenticRun: the shared work order
 
 An `AgenticRun` is a custom Kubernetes object used by the Agentic Operator. It stores the workflow data in the Kubernetes API. It is a work record, not a running process.
 
@@ -275,7 +279,7 @@ spec:
 
 The Adapter creates the record. It does not update or delete it. The Operator owns the run lifecycle after creation.
 
-### Lightspeed Agentic Operator: the coordinator
+### 4. Lightspeed Agentic Operator: the coordinator
 
 The Lightspeed Agentic Operator is a Kubernetes controller. A controller watches Kubernetes objects and works toward the requested state. This Operator reads the requested work in `spec` and the current progress in `status`.
 
@@ -283,7 +287,7 @@ For each run, the Operator finds the next stage and creates the sandbox Pod for 
 
 The Operator manages the workflow. Sandbox Pods perform the investigation, action, and verification. The Adapter decides which alert creates a run; the Operator does not choose a remediation option for you.
 
-### ApprovalPolicy: the decision gate
+### 5. ApprovalPolicy: the decision gate
 
 An `ApprovalPolicy` controls whether each workflow stage runs automatically or waits for explicit approval. The policy is cluster-scoped and must be named `cluster`.
 
@@ -326,7 +330,7 @@ spec:
 
 If a stage is missing from the policy, the current API treats that stage as manual. A platform team can therefore start with analysis only, then add an execution stage when its review process is ready.
 
-### Sandbox workers: the temporary stage workers
+### 6. Sandbox workers: the temporary stage workers
 
 A sandbox Pod is a short-lived worker for one stage. It receives:
 
@@ -350,23 +354,11 @@ The Agentic Operator waits for the sandbox service to become ready. It then send
 
 Analysis, execution, and verification use separate temporary workers. A skill tells a worker how to investigate. RBAC controls what the worker can read or change. Kubernetes can remove the temporary Pods and execution permissions after the run. The result objects remain available for review.
 
-## Read the same alert from start to finish
-
-The `ServiceErrorRateHigh` example now has a clear path:
-
-1. The service error-rate alert becomes active.
-2. The Adapter checks its filtering and delay settings.
-3. The Adapter creates an `AgenticRun` with the alert details and target namespace.
-4. The Operator starts the analysis worker.
-5. The policy requires a person to approve execution.
-6. After approval, the Operator can start the execution worker.
-7. The Operator starts verification when the run includes it and the policy permits it.
-
-The `AgenticRun` gives your team one record to review across the flow. Check its conditions and results alongside your usual logs, metrics, events, and change history.
-
 ## Final thoughts
 
 Agentic troubleshooting creates clear handoffs: Alertmanager routes the alert, the Alerts Adapter creates the `AgenticRun`, and the Agentic Operator manages temporary workers for analysis, an approved action, and verification. The shared Kubernetes record lets teams review the evidence, decision, and result in one place.
+
+Review the `AgenticRun` conditions and results alongside logs, metrics, events, and change history before approving an action.
 
 ## Sources and learn more
 
