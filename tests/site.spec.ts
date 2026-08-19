@@ -56,7 +56,7 @@ test('article presents source-backed learning aids as structured content', async
   await page.goto(pagePath(publishedArticlePath));
 
   await expect(page.getByRole('heading', { level: 2, name: 'What you will learn' })).toBeVisible();
-  await expect(page.locator('.article-callout--important')).toContainText('Start with your own evidence');
+  await expect(page.locator('.article-callout--important')).toContainText('Start with evidence from your cluster');
   await expect(page.locator('.article-callout--checkpoint, .article-callout--caution')).toHaveCount(0);
   await expect(page.getByText('OpenShift 5.0.0-ec.6', { exact: true })).toHaveCount(0);
 

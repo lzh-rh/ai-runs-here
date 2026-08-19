@@ -22,19 +22,19 @@ featured: false
 import AgenticWorkflow from '../../components/AgenticWorkflow.astro';
 import ArticleCallout from '../../components/ArticleCallout.astro';
 
-An alert tells you that a service needs attention. It does not explain the cause or choose a safe response. Agentic troubleshooting organizes the investigation, a possible action, and a verification check as Kubernetes resources that your team can inspect.
+An alert tells you that a service may have a problem. It identifies a symptom, but it does not explain the cause or decide which action is safe. Agentic troubleshooting gives your team a structured way to investigate the alert, review a proposed action, and check whether the service recovers. It records each step as Kubernetes resources that your team can inspect.
 
-This walkthrough uses one illustrative alert: `ServiceErrorRateHigh` fires for `storefront-api`. The component roles and YAML fields come from the upstream sources linked in this article. The YAML explains the workflow; it is not an installation guide.
+This walkthrough follows an example alert: `ServiceErrorRateHigh` is active for `storefront-api`. You will see how the main components work together and how their Kubernetes resources guide the workflow. The example YAML is for learning; it is not a complete installation configuration.
 
-<ArticleCallout variant="important" title="Start with your own evidence">
-  <p>An error-rate alert can have many causes. Treat the scenario in this article as an example. On a real cluster, check the alert, logs, metrics, events, and recent changes before deciding what caused the incident.</p>
+<ArticleCallout variant="important" title="Start with evidence from your cluster">
+  <p>Different problems can trigger the same error-rate alert. During a real incident, review the alert, logs, metrics, events, and recent changes before deciding what caused it. Use the <code>storefront-api</code> scenario to learn how the workflow operates.</p>
 </ArticleCallout>
 
 ## What you will learn
 
-- How an active alert becomes an `AgenticRun` work record.
-- What each component owns during analysis, approval, execution, and verification.
-- How to read the three YAML resources that shape the workflow.
+- How the Alerts Adapter turns an active alert into an `AgenticRun` work record.
+- What each component does during analysis, approval, execution, and verification.
+- How to read the key fields in the example YAML.
 
 ## Follow a service error-rate alert
 
