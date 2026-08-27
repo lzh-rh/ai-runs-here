@@ -1,0 +1,16 @@
+---
+import { withBase } from '../config/site';
+
+interface Props {
+  src: string;
+  alt: string;
+  caption: string;
+}
+
+const { src, alt, caption } = Astro.props;
+---
+
+<figure class="article-figure">
+  <img src={withBase(src)} alt={alt} loading="lazy" />
+  <figcaption>{caption}</figcaption>
+</figure>

@@ -11,10 +11,17 @@ interface Props {
 }
 
 const { post, headings } = Astro.props;
-const tableOfContents = headings.filter(({ depth }) => depth === 2 || depth === 3);
-const topic = topicConfig[post.data.topic];
 const showEnvironment = post.data.testedVersions.length > 0;
 const showPrerequisites = post.data.prerequisites.length > 0;
+const setupHeadings: MarkdownHeading[] = [
+  ...(showEnvironment ? [{ depth: 2, slug: 'tested-versions-title', text: 'Tested versions' }] : []),
+  ...(showPrerequisites ? [{ depth: 2, slug: 'prerequisites-title', text: 'Prerequisites' }] : [])
+];
+const tableOfContents = [
+  ...setupHeadings,
+  ...headings.filter(({ depth }) => depth >= 2 && depth <= post.data.tocDepth)
+];
+const topic = topicConfig[post.data.topic];
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
 ---

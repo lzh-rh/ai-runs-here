@@ -24,6 +24,7 @@ const postFields = z.object({
   tags: z.array(trimmedString.min(1)).default([]),
   difficulty: z.enum(difficulties),
   estimatedMinutes: z.number().int().positive(),
+  tocDepth: z.union([z.literal(2), z.literal(3)]).default(3),
   testedVersions: z.array(trimmedString.min(3)),
   prerequisites: z.array(trimmedString.min(3)).default([]),
   draft: z.boolean().default(false),

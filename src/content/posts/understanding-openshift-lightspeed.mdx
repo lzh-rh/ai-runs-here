@@ -1,0 +1,434 @@
+---
+kind: guide
+title: Understanding OpenShift Lightspeed and its components
+description: Set up OpenShift Lightspeed, understand spec.ols.deployment, and follow one Pending Pod question through the system.
+publishedDate: 2026-08-27
+updatedDate: 2026-08-27
+topic: openshift-lightspeed
+tags:
+  - OpenShift
+  - OpenShift Lightspeed
+  - OLSConfig
+  - PostgreSQL
+  - MCP
+difficulty: beginner
+estimatedMinutes: 14
+tocDepth: 2
+testedVersions:
+  - OpenShift Lightspeed 1.1.2
+  - OpenShift Container Platform 4.22.9
+prerequisites:
+  - OpenShift cluster-admin access
+  - An LLM provider available to OpenShift Lightspeed and its credential
+  - The oc command-line tool for read-only checks
+draft: false
+featured: false
+---
+
+import ArticleCallout from '../../components/ArticleCallout.astro';
+import ArticleImage from '../../components/ArticleImage.astro';
+import ClassicOlsSetupWorkflow from '../../components/ClassicOlsSetupWorkflow.astro';
+
+Suppose an application Pod named `checkout-api` is stuck in `Pending`. You open OpenShift Lightspeed and ask:
+
+> Why is the checkout-api Pod pending in the demo namespace?
+
+This guide first shows how an administrator installs and configures OpenShift Lightspeed. It then explains the fields under `spec.ols.deployment` before following the Pending Pod question through each component.
+
+## What you will learn
+
+- How to install and configure OpenShift Lightspeed.
+- What the fields under `spec.ols.deployment` control.
+- How one Pending Pod question travels through the components.
+
+<ArticleCallout variant="checkpoint" title="Keep this mental model">
+  <p><code>OLSConfig</code> describes the desired setup, and the Operator creates the workloads. The app server then coordinates PostgreSQL for conversation history, RHOKP for documentation, MCP for authorized cluster data, and the LLM for the generated response.</p>
+</ArticleCallout>
+
+## Meet the example problem
+
+A **Pod** is the Kubernetes object that runs one or more containers. A **namespace** groups Kubernetes objects. In this example, the Pod is named `checkout-api`, and it belongs to the `demo` namespace.
+
+`Pending` means Kubernetes accepted the Pod but it is not running yet. One possible reason is that the scheduler cannot find a suitable Node.
+
+A **Node** is a machine that can run Pods. The **scheduler** compares the Pod's requirements with the available Nodes. A Pod's CPU and memory **requests** tell the scheduler how much capacity it needs.
+
+An administrator could inspect this example with:
+
+```bash
+oc describe pod checkout-api -n demo
+```
+
+For this teaching scenario, imagine the Events section contains:
+
+```text
+Type:     Warning
+Reason:   FailedScheduling
+Message:  0/3 nodes are available: 3 Insufficient cpu.
+```
+
+An **Event** is a Kubernetes record describing something that happened to an object. Here, `FailedScheduling` means the scheduler could not place the Pod. `Insufficient cpu` explains why: none of the three Nodes had enough unallocated CPU for the Pod's request.
+
+The Kubernetes documentation confirms that a Pod remains unscheduled when no Node satisfies its requirements. The scheduler uses resource requests during that decision, even when current CPU usage appears low.
+
+## Ask Lightspeed about the Pod
+
+Choose **Troubleshooting** because you have a specific cluster problem. **Ask** is better for a general question such as “What is a Pending Pod?”
+
+Both modes use the same components and the same user permissions. The mode changes the backend instructions and tool-use behavior. It does not give the user more cluster access.
+
+The diagram previews both parts of this guide. The setup flow shows what an administrator creates. The question flow shows what happens after a user sends a message:
+
+<ClassicOlsSetupWorkflow />
+
+## Set up and configure OpenShift Lightspeed
+
+Before you can use the question flow, a cluster administrator installs the Operator, creates the credential Secret, and creates `OLSConfig`.
+
+### 1. Install the Operator
+
+The **OpenShift Lightspeed Operator** is a Kubernetes controller. A controller watches desired-state objects and works to make the cluster match them.
+
+For OpenShift Container Platform 4.20 or later, open **Ecosystem → Software Catalog** and search for **OpenShift Lightspeed**.
+
+<ArticleImage
+  src="/images/openshift-lightspeed/software-catalog.png"
+  alt="OpenShift Software Catalog search results showing the OpenShift Lightspeed Operator"
+  caption="The Software Catalog shows the Red Hat OpenShift Lightspeed Operator while openshift-lightspeed remains selected."
+/>
+
+After installation, **Ecosystem → Installed Operators** should show the Operator as `Succeeded`.
+
+### 2. Create a credential Secret
+
+A **Secret** is a Kubernetes object for sensitive values. Lightspeed uses this Secret to authenticate to an existing LLM endpoint. The Operator does not install the LLM.
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: credentials
+  namespace: openshift-lightspeed
+type: Opaque
+stringData:
+  apitoken: <api_token>
+```
+
+This is a partial learning example. Use the key required by your documented provider configuration, and never commit the real token to source control.
+
+### 3. Create OLSConfig
+
+`OLSConfig` is the administrator's desired-state document for Lightspeed. It connects the credential, provider, and model.
+
+<ArticleImage
+  src="/images/openshift-lightspeed/create-olsconfig.png"
+  alt="OpenShift console YAML editor showing an OLSConfig resource"
+  caption="For OpenShift Lightspeed, focus on spec.llm and spec.ols. The model in this screenshot is a lab observation, not a recommendation."
+/>
+
+```yaml
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+spec:
+  llm:
+    providers:
+      - name: OpenAI
+        type: openai
+        credentialsSecretRef:
+          name: credentials
+        models:
+          - name: gpt-3.5-turbo-1106
+            parameters:
+              toolBudgetRatio: 0.5
+  ols:
+    conversationCache:
+      postgres:
+        maxConnections: 2000
+        sharedBuffers: 256MB
+      type: postgres
+    defaultProvider: OpenAI
+    defaultModel: gpt-3.5-turbo-1106
+    deployment:
+      api:
+        replicas: 1
+      console:
+        replicas: 1
+      dataCollector: {}
+      database:
+        replicas: 1
+      mcpServer:
+        replicas: 1
+      rhokp:
+        replicas: 1
+    logLevel: INFO
+    mcpKubeServerConfig:
+      timeout: 60
+    userDataCollection: {}
+```
+
+This is a focused OpenShift Lightspeed example. Additional defaulted and Agentic fields are omitted, and no Secret value is included.
+
+Read the connections in order:
+
+1. `credentialsSecretRef.name` points to the Secret named `credentials`.
+2. `type: openai` identifies the LLM provider type used by this example.
+3. `models` lists a model available from the provider.
+4. `defaultProvider` and `defaultModel` select the pair used for questions.
+5. `conversationCache.type` selects PostgreSQL.
+6. `deployment` records the desired component settings used by this example.
+7. `metadata.name: cluster` uses the name expected by the Operator.
+
+The Operator watches this object and works to make the cluster match the requested setup. It creates or updates the app server, console plugin, PostgreSQL, RHOKP, MCP server, generated configuration, certificates, and supporting permissions through the Kubernetes API. It then records summarized readiness conditions in `OLSConfig.status`. This repeating process is called **reconciliation**.
+
+Check the result without changing the cluster:
+
+```bash
+oc get olsconfig cluster
+oc get deployment,service,pod -n openshift-lightspeed
+```
+
+## Understand the `spec.ols.deployment` fields
+
+The `deployment` section controls supported runtime settings such as CPU, memory, and scheduling. It does not, by itself, enable optional features.
+
+In OpenShift Lightspeed 1.1.2, `api.replicas` and `mcpServer.replicas` can change the number of Pods for those components. The Operator fixes the console, PostgreSQL, and RHOKP at one replica. Their `replicas: 1` values in the example reflect that fixed count.
+
+<div className="article-table" role="region" aria-label="OpenShift Lightspeed deployment settings" tabIndex={0}>
+
+| `deployment` item | Workload it tunes |
+| --- | --- |
+| `api` | Lightspeed app server |
+| `console` | Lightspeed console plugin |
+| `database` | PostgreSQL conversation cache |
+| `rhokp` | Product documentation retrieval |
+| `mcpServer` | Built-in OpenShift MCP server |
+| `dataCollector` | Feedback and transcript exporter sidecar |
+
+</div>
+
+For example, `spec.ols.deployment.dataCollector` adjusts the collector container's resource requests and limits. It does not enable collection by itself.
+
+## Follow the question step by step
+
+The YAML blocks in this section are focused fragments from one consistent example `OLSConfig`, not complete resources. Fields under `deployment` tune a component; they do not install or enable that component by themselves.
+
+### 1. The console plugin sends the question
+
+The **console plugin** is the Lightspeed chat interface inside OpenShift Console. It sends the question through the Console proxy to `Service/lightspeed-app-server`.
+
+The proxy includes the logged-in user's token. That matters later because OpenShift uses the token to decide which cluster information the user may access.
+
+The browser does not call the LLM directly.
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  ols:
+    deployment:
+      console:
+        replicas: 1
+```
+
+The Operator creates and connects the console plugin when it reconciles `OLSConfig`.
+
+### 2. The app server coordinates the request
+
+The **app server** is the main OpenShift Lightspeed backend. A backend is the server-side part of an application.
+
+It receives the question and prepares the request for the LLM. That request can include relevant earlier messages, system instructions, and descriptions of the tools available for this question.
+
+If the LLM requests a tool, the app server invokes it and returns the result to the LLM. For RHOKP, it executes the built-in documentation search. For MCP, it sends a request to the configured MCP server. The app server coordinates this exchange; it does not inspect the evidence or generate the answer itself.
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  ols:
+    deployment:
+      api:
+        replicas: 1
+```
+
+Here, `api` means the app-server component. The provider and model are selected elsewhere.
+
+### 3. PostgreSQL remembers the conversation
+
+**PostgreSQL** stores the conversation history that the app server may need again. For the first question, there is no earlier conversation to load. Suppose the user then asks:
+
+> How do I check that?
+
+The word “that” refers to the earlier Pending Pod question. PostgreSQL returns that conversation history so the app server can understand the follow-up.
+
+OpenShift Lightspeed 1.1.2 uses PostgreSQL for the conversation cache in an Operator-managed installation; `OLSConfig` accepts only `postgres` as the cache type. You choose how PostgreSQL stores its database files:
+
+- **Non-persistent:** omit `spec.ols.storage`. PostgreSQL stores its files in the Pod's temporary storage. A replacement Pod starts without the earlier conversation history.
+- **Persistent:** add `spec.ols.storage`. The Operator requests a PersistentVolumeClaim so a replacement Pod can use the stored conversation history.
+
+The standalone upstream Lightspeed service offers another cache type: an **in-memory cache**. It keeps history inside the app-server process and loses that history when the process stops. This option belongs to the standalone service and is not available through the Operator-managed `OLSConfig`.
+
+<ArticleCallout variant="important" title="Technology Preview">
+  <p>PostgreSQL persistence is a Technology Preview feature. It is disabled by default; adding <code>spec.ols.storage</code> enables it.</p>
+</ArticleCallout>
+
+#### Relevant setup YAML
+
+PostgreSQL without persistent storage:
+
+```yaml
+spec:
+  ols:
+    conversationCache:
+      postgres:
+        maxConnections: 2000
+        sharedBuffers: 256MB
+      type: postgres
+```
+
+This example omits `spec.ols.storage`, so PostgreSQL uses non-persistent `emptyDir` storage.
+
+To request persistent storage instead, an administrator would add:
+
+```yaml
+spec:
+  ols:
+    storage: {}
+```
+
+`conversationCache.type` selects PostgreSQL. `maxConnections` and `sharedBuffers` configure the database. The optional empty `storage` object requests the documented default PersistentVolumeClaim; an administrator can instead specify a valid `size` and `class` for the cluster.
+
+### 4. RHOKP can provide product documentation
+
+**RHOKP**, the Red Hat Offline Knowledge Portal, provides the built-in OpenShift product-documentation path.
+
+Lightspeed can use **retrieval-augmented generation**, usually shortened to RAG. RAG means finding relevant source material before asking the LLM to generate an answer.
+
+When RHOKP is configured, the app server makes a built-in tool named `search_openshift_documentation` available to the LLM. This tool searches Red Hat product documentation; it does not inspect the live cluster.
+
+In **Ask mode**, Lightspeed sends system instructions to the LLM. These are internal directions from Lightspeed, separate from the user's question. They require the LLM to request `search_openshift_documentation` before answering an OpenShift product question. The app server receives that request, invokes the RHOKP search, and returns matching documentation passages to the LLM. The LLM then uses those passages to generate its answer.
+
+In **Troubleshooting mode**, the same RHOKP tool remains available when configured, but the system instructions do not require the LLM to use it. Troubleshooting primarily directs the LLM to gather live cluster evidence through MCP tools.
+
+For this example, the search may return documentation explaining Pod scheduling and resource requests. RHOKP searches published product documentation; it does not inspect the live `checkout-api` Pod.
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  ols:
+    deployment:
+      rhokp:
+        replicas: 1
+```
+
+Omitting `byokRAGOnly` leaves the built-in documentation path enabled; setting `byokRAGOnly: true` disables it.
+
+### 5. MCP can provide live cluster evidence
+
+**Model Context Protocol**, or MCP, is a standard way for an AI application to discover and call tools.
+
+When the built-in OpenShift MCP server is enabled, the app server retrieves descriptions of its available tools and presents relevant tools to the LLM. If the LLM requests one, the app server calls that MCP tool and returns the result to the LLM.
+
+For this example, an MCP tool could read the `checkout-api` Pod and its `FailedScheduling` Event. The LLM does not contact the MCP server directly.
+
+The built-in MCP server supports read and write operations. By default, OpenShift asks the user to approve a non-read operation, such as updating or deleting a resource, before it runs. OpenShift **role-based access control**, or RBAC, still decides whether the user has permission. Approval does not add permissions or bypass RBAC.
+
+<ArticleCallout variant="important" title="Technology Preview and data handling">
+  <p>Cluster interaction through MCP is a Technology Preview feature. The built-in server blocks Secrets and RBAC objects by default, but OLS filtering and redaction settings do not apply to content returned by MCP tools. That content remains visible to the configured LLM.</p>
+</ArticleCallout>
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  ols:
+    mcpKubeServerConfig:
+      timeout: 60
+    deployment:
+      mcpServer:
+        replicas: 1
+```
+
+This example omits `introspectionEnabled`; the schema says omission means `true`. It sets the built-in MCP timeout to 60 seconds. RBAC still controls every cluster request.
+
+### 6. The external LLM generates an explanation
+
+The **large language model**, or LLM, first receives the prepared request. It can then ask the app server to invoke an available tool. Across one or more exchanges, the LLM can receive:
+
+- the user's question;
+- relevant conversation history from PostgreSQL;
+- documentation passages from RHOKP;
+- authorized tool results from MCP.
+
+After it has enough information, the LLM generates the answer. A response for the teaching example could explain:
+
+> The Pod is Pending because the scheduler found no Node with enough unallocated CPU for its request. Review the Pod's CPU request and the Nodes' allocatable resources before deciding what to change.
+
+This is an example explanation, not captured Lightspeed output. The app server streams the generated response back to the console.
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  llm:
+    providers:
+      - name: OpenAI
+        type: openai
+        credentialsSecretRef:
+          name: credentials
+        models:
+          - name: gpt-3.5-turbo-1106
+            parameters:
+              toolBudgetRatio: 0.5
+  ols:
+    defaultProvider: OpenAI
+    defaultModel: gpt-3.5-turbo-1106
+```
+
+This example uses one provider and model pairing to show the connections; it is not a model recommendation. The provider entry names the provider type, credential Secret, and model; the two default fields select that pair. `toolBudgetRatio: 0.5` reserves half of the model's context window for tool-related content when tools are configured. It is a capacity limit, not an amount every request must use.
+
+### 7. The data collector follows a separate path
+
+The **data collector** can export permitted feedback and transcripts to Red Hat. It is not required to assemble the answer. Its job is separate from PostgreSQL:
+
+- PostgreSQL helps the conversation remember earlier messages.
+- The data collector handles an optional export path.
+
+When enabled, the collector runs as the `lightspeed-to-dataverse-exporter` sidecar beside the app-server container. A **sidecar** is an additional container in the same Pod that performs a supporting job.
+
+#### Relevant setup YAML
+
+```yaml
+spec:
+  ols:
+    userDataCollection: {}
+    deployment:
+      dataCollector: {}
+```
+
+Read the empty objects separately:
+
+- `userDataCollection: {}` leaves transcript and feedback collection enabled. An administrator can disable either type in this section.
+- `dataCollector: {}` uses the Operator's default CPU and memory settings for the collector container.
+
+The collector sends data only when remote health monitoring, also called cluster telemetry, is enabled. OpenShift clusters enable telemetry by default.
+
+Disabling transcript and feedback collection does not stop the app server from sending inference requests to the configured LLM provider. Those are separate outbound paths.
+
+## Final thoughts
+
+The app server coordinates each question. It can load earlier messages from PostgreSQL, search documentation through RHOKP, or use MCP for an RBAC-permitted cluster operation. It sends the collected context to the LLM and streams the answer back to the console. The data collector follows a separate path for sending permitted transcripts and feedback to Red Hat.
+
+## Sources and learn more
+
+- <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/install/ols-installing-lightspeed" target="_blank" rel="noopener noreferrer">Installing Red Hat OpenShift Lightspeed</a>
+- <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed" target="_blank" rel="noopener noreferrer">Configuring Red Hat OpenShift Lightspeed</a>
+- <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/olsconfig-api" target="_blank" rel="noopener noreferrer">OLSConfig API reference</a>
+- <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/about/ols-about-openshift-lightspeed" target="_blank" rel="noopener noreferrer">OpenShift Lightspeed data and telemetry</a>
+- <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/release_notes/ols-release-notes" target="_blank" rel="noopener noreferrer">Red Hat OpenShift Lightspeed release notes</a>
+- <a href="https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/" target="_blank" rel="noopener noreferrer">Kubernetes scheduler</a>
+- <a href="https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/" target="_blank" rel="noopener noreferrer">Kubernetes resource management for Pods and containers</a>
+
+Sources checked: 2026-08-27

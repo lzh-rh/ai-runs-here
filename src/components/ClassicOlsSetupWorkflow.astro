@@ -1,0 +1,96 @@
+<figure class="question-flow" aria-labelledby="classic-ols-setup-flow-title">
+  <figcaption id="classic-ols-setup-flow-title">OLSConfig setup flow</figcaption>
+  <p class="question-flow__intro">This happens before users ask questions.</p>
+
+  <ol class="question-flow__lanes">
+    <li>
+      <div class="question-flow__step">
+        <span>1</span>
+        <strong>Configure</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="Administrator to Kubernetes API">
+          <span>Administrator</span><b aria-hidden="true">→</b><span>Kubernetes API</span>
+        </p>
+        <p>The administrator creates a Secret for the LLM credential and an OLSConfig that points to it and describes the desired setup.</p>
+      </div>
+    </li>
+
+    <li>
+      <div class="question-flow__step">
+        <span>2</span>
+        <strong>Reconcile</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="Kubernetes API and OLS Operator">
+          <span>Kubernetes API</span><b aria-hidden="true">↔</b><span class="question-flow__coordinator">OLS Operator</span>
+        </p>
+        <p>The Operator watches OLSConfig and works to make the cluster match the requested setup. It creates or updates the required components through the API, then records summarized readiness conditions in <code>OLSConfig.status</code>.</p>
+      </div>
+    </li>
+  </ol>
+</figure>
+
+<figure class="question-flow" aria-labelledby="classic-ols-question-flow-title">
+  <figcaption id="classic-ols-question-flow-title">Question flow</figcaption>
+  <p class="question-flow__intro">This flow repeats whenever the user sends a message.</p>
+
+  <ol class="question-flow__lanes">
+    <li>
+      <div class="question-flow__step">
+        <span>1</span>
+        <strong>Send the question</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="User to console plugin to app server">
+          <span>User</span><b aria-hidden="true">→</b><span>Console plugin</span><b aria-hidden="true">→</b><span class="question-flow__coordinator">App server</span>
+        </p>
+        <p>The console plugin sends the user's message to the app server. The app server coordinates the rest of this request; the console does not call the LLM or tools directly.</p>
+      </div>
+    </li>
+
+    <li>
+      <div class="question-flow__step">
+        <span>2</span>
+        <strong>Prepare the request and ask the LLM</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="App server to configured language model">
+          <span class="question-flow__coordinator">App server</span><b aria-hidden="true">→</b><span>Configured LLM</span>
+        </p>
+        <p>For a follow-up, the app server retrieves earlier turns from PostgreSQL. It prepares the new question, relevant history, the selected mode's instructions, and descriptions of available tools, then sends them to the configured LLM.</p>
+        <p class="question-flow__side"><strong>For a follow-up:</strong> PostgreSQL → App server. A first question may have no earlier history.</p>
+      </div>
+    </li>
+
+    <li class="question-flow__tool-lane">
+      <div class="question-flow__step">
+        <span>3</span>
+        <strong>Use a tool when more information is needed</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="Language model requests a tool through the app server">
+          <span>LLM</span><b aria-hidden="true">→</b><span class="question-flow__coordinator">App server</span><b aria-hidden="true">→</b><span>RHOKP or MCP</span>
+        </p>
+        <p>The model may answer immediately, or its mode instructions may lead it to request a tool. The app server invokes the requested tool: it executes the built-in RHOKP documentation search or calls an MCP server for cluster information or an action that the user approves and RBAC permits.</p>
+        <p class="question-flow__side"><strong>The result returns:</strong> RHOKP or MCP → App server → LLM. This loop can repeat if the model needs more information.</p>
+      </div>
+    </li>
+
+    <li>
+      <div class="question-flow__step">
+        <span>4</span>
+        <strong>Return the answer and save this turn</strong>
+      </div>
+      <div>
+        <p class="question-flow__route" aria-label="Language model to app server to console plugin to user">
+          <span>LLM</span><b aria-hidden="true">→</b><span class="question-flow__coordinator">App server</span><b aria-hidden="true">→</b><span>Console plugin</span><b aria-hidden="true">→</b><span>User</span>
+        </p>
+        <p>When it has enough information, the LLM generates the answer. The app server streams the answer to the console. After the response is generated, the app server stores the question and answer in PostgreSQL so a later follow-up can retrieve them.</p>
+        <p class="question-flow__side"><strong>Save this turn:</strong> App server → PostgreSQL</p>
+      </div>
+    </li>
+  </ol>
+
+  <p class="question-flow__summary"><strong>The app server is the coordinator.</strong> It prepares the request, invokes tools requested by the LLM, returns tool results, streams the answer, and saves the completed conversation turn. It does not generate the answer.</p>
+</figure>
