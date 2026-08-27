@@ -45,6 +45,15 @@ test('header uses the supplied Red Hat identity pattern', async ({ page }) => {
   await expect(brand.getByText('Applied AI on OpenShift', { exact: true })).toBeVisible();
 });
 
+test('pages use the Red Hat icon as the browser favicon', async ({ page }) => {
+  await page.goto(pagePath('/'));
+
+  await expect(page.locator('link[rel="icon"]')).toHaveAttribute(
+    'href',
+    pagePath('/red-hat-icon.png')
+  );
+});
+
 test('pages omit the visible publication footer', async ({ page }) => {
   await page.goto(pagePath('/'));
 
