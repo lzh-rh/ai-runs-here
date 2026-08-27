@@ -19,7 +19,7 @@ testedVersions:
   - OpenShift Container Platform 4.22.9
 prerequisites:
   - OpenShift cluster-admin access
-  - An LLM provider available to OpenShift Lightspeed and its credential
+  - Credentials for your chosen LLM provider, such as an OpenAI API key when using OpenAI
   - The oc command-line tool for read-only checks
 draft: false
 featured: false
@@ -102,6 +102,8 @@ After installation, **Ecosystem → Installed Operators** should show the Operat
 ### 2. Create a credential Secret
 
 A **Secret** is a Kubernetes object for sensitive values. Lightspeed uses this Secret to authenticate to an existing LLM endpoint. The Operator does not install the LLM.
+
+OpenShift Lightspeed 1.1.2 supports several LLM providers, including OpenAI, Microsoft Azure OpenAI, IBM watsonx, Red Hat OpenShift AI, Red Hat Enterprise Linux AI, Google Vertex AI, and AWS Bedrock. This walkthrough uses OpenAI, so `<api_token>` represents an OpenAI API key. If you choose another provider, follow the provider-specific Secret and `OLSConfig` examples in the <a href="https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed" target="_blank" rel="noopener noreferrer">OpenShift Lightspeed configuration documentation</a>.
 
 ```yaml
 apiVersion: v1
