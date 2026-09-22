@@ -1,0 +1,860 @@
+---
+kind: lab
+title: "Connect OpenShift Lightspeed to MCP Gateway: a beginner lab"
+description: Build a read-only path from OpenShift Lightspeed through MCP Gateway to the OpenShift API, with a checkpoint at every boundary.
+publishedDate: 2026-09-22
+updatedDate: 2026-09-22
+topic: mcp-gateway
+tags:
+  - OpenShift
+  - OpenShift Lightspeed
+  - Red Hat OpenShift AI
+  - MCP Gateway
+  - MCP server
+difficulty: beginner
+estimatedMinutes: 22
+tocDepth: 3
+testedVersions:
+  - OpenShift Container Platform 4.22
+  - Red Hat OpenShift AI 3.5.0
+  - MCP Gateway Operator 0.7.1
+  - OpenShift MCP server 0.4
+  - Red Hat Connectivity Link 1.4.1
+  - OpenShift Lightspeed 1.1.3
+prerequisites:
+  - Cluster administrator access to an OpenShift 4.22 learning cluster
+  - OpenShift Lightspeed 1.1.3 with normal chat working
+  - An OpenShift Lightspeed model that supports tool calling
+  - The oc, curl, awk, and grep command-line tools
+draft: false
+featured: false
+---
+
+import ArticleCallout from '../../components/ArticleCallout.astro';
+import ArticleImage from '../../components/ArticleImage.astro';
+import McpGatewayOlsFlow from '../../components/McpGatewayOlsFlow.astro';
+
+Model Context Protocol (MCP) gives an AI application a standard way to discover and call tools. An MCP server supplies the tools. An MCP client, such as OpenShift Lightspeed, decides when to ask for one of them.
+
+This lab is a Gateway experiment. OpenShift Lightspeed asks MCP Gateway for a read-only OpenShift tool, the Gateway sends the call to an OpenShift MCP server, and the server reads data from the OpenShift API.
+
+<McpGatewayOlsFlow />
+
+You will test the MCP server directly before adding the Gateway. You will also test the Gateway before changing OpenShift Lightspeed. This order gives you a known-good boundary when something fails.
+
+<ArticleCallout variant="important" title="Use a disposable learning cluster">
+  <p>The MCP Lifecycle Operator, MCP catalog, MCP Gateway, and the custom MCP connection in OpenShift Lightspeed are Technology Preview features. This lab keeps the Gateway service internal to the cluster. Use a disposable cluster and non-sensitive data, and do not expose this configuration publicly.</p>
+</ArticleCallout>
+
+## What you will learn
+
+- The difference between an MCP client, MCP server, and MCP Gateway.
+- Why MCP Gateway handles `tools/list` and `tools/call` differently.
+- How to connect OpenShift Lightspeed to one Gateway URL.
+- How to prove broker discovery and one read-only tool call.
+
+## Before you begin
+
+The Gateway registration, broker discovery, Gateway protocol requests, read-only tool call, and OpenShift Lightspeed connection were run on a disposable learning cluster with the versions listed above. Use non-sensitive test data because the model provider receives prompts and tool results.
+
+If you need help installing or configuring OpenShift Lightspeed before this lab, see [Understanding OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/understanding-openshift-lightspeed/). This lab starts after normal Lightspeed chat is already working.
+
+## 1. Prepare OpenShift AI
+
+OpenShift AI supplies the MCP catalog and the MCP Lifecycle Operator used to deploy the server.
+
+### Install OpenShift AI 3.5
+
+In the OpenShift web console:
+
+1. Open **Ecosystem > Software Catalog**.
+2. Search for **Red Hat OpenShift AI**.
+3. Open the Operator and click **Install**.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/01-rhoai-operator.png"
+  alt="OpenShift Software Catalog showing the Red Hat OpenShift AI Operator and its Install button"
+  caption="Open the Red Hat-provided Operator. The exact available maintenance version can change after this screenshot."
+/>
+
+Select the `stable-3.x` channel, version `3.5.0`, all namespaces, and the recommended `redhat-ods-operator` namespace. Follow your organization's update-approval policy.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/02-rhoai-install-settings.png"
+  alt="OpenShift AI installation settings with stable-3.x, version 3.5.0, all namespaces, and the recommended namespace selected"
+  caption="The settings used for this lab observation. Check the current catalog before selecting a version."
+/>
+
+When the Operator succeeds, click **Create DataScienceCluster** and keep the standard component settings.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/03-create-datasciencecluster.png"
+  alt="Installed OpenShift AI Operator prompting the administrator to create a DataScienceCluster"
+  caption="The DataScienceCluster tells the Operator which OpenShift AI components to manage."
+/>
+
+Check the result:
+
+```bash
+oc get csv -A | grep rhods-operator
+oc get datasciencecluster
+```
+
+A ClusterServiceVersion, or CSV, is the installed Operator record. Continue when its phase is `Succeeded` and a `DataScienceCluster` exists.
+
+### Enable the MCP Lifecycle Operator
+
+Set the name returned by `oc get datasciencecluster`. The common name is `default-dsc`:
+
+```bash
+export DSC_NAME=default-dsc
+```
+
+If the `DataScienceCluster` does not become ready because the optional `trainer` component cannot become ready, remove it for this lab. This lab does not use distributed training, and a failed component can keep the overall `DataScienceCluster` from reporting `Ready`.
+
+```bash
+oc patch datasciencecluster "${DSC_NAME}" \
+  --type=merge \
+  -p '{"spec":{"components":{"trainer":{"managementState":"Removed"}}}}'
+
+oc get datasciencecluster "${DSC_NAME}" -w
+```
+
+`Removed` tells OpenShift AI not to install that component. Use this workaround only when you do not need the Trainer feature.
+
+Ask the API server to validate the change without saving it:
+
+```bash
+oc patch datasciencecluster "${DSC_NAME}" \
+  --type=merge \
+  --dry-run=server \
+  -o yaml \
+  -p '{"spec":{"components":{"mcplifecycleoperator":{"managementState":"Managed"}}}}'
+```
+
+If the dry run succeeds, apply the same patch:
+
+```bash
+oc patch datasciencecluster "${DSC_NAME}" \
+  --type=merge \
+  -p '{"spec":{"components":{"mcplifecycleoperator":{"managementState":"Managed"}}}}'
+```
+
+The `mcplifecycleoperator` component watches `MCPServer` objects and manages their workloads. MCP Gateway is a separate Operator that you install later.
+
+Confirm that the lifecycle operator is running before you continue:
+
+```bash
+oc get pods -n redhat-ods-applications \
+  -l app.kubernetes.io/name=mcp-lifecycle-operator
+```
+
+### Enable the dashboard features
+
+The Operator can be healthy while the MCP catalog remains hidden. `OdhDashboardConfig` controls what the dashboard shows.
+
+In the OpenShift console, go to **Home > Search**. Search for `dashboard`, set **Project** to **All Projects**, then open `OdhDashboardConfig` named `odh-dashboard-config` in `redhat-ods-applications`.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/04-find-dashboard-config.png"
+  alt="OpenShift Search page showing OdhDashboardConfig named odh-dashboard-config in redhat-ods-applications"
+  caption="Search is one way to find the dashboard configuration without memorizing its API group."
+/>
+
+Enable only the MCP catalog. The `mcpCatalog` field belongs under `spec.dashboardConfig`; this merge patch leaves the other dashboard settings unchanged.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/05-enable-mcp-catalog.png"
+  alt="YAML fragment showing spec dashboardConfig with mcpCatalog set to true"
+  caption="Setting mcpCatalog to true makes the MCP catalog available in the dashboard."
+/>
+
+Validate the focused patch first:
+
+```bash
+oc patch odhdashboardconfig odh-dashboard-config \
+  -n redhat-ods-applications \
+  --type=merge \
+  --dry-run=server \
+  -o yaml \
+  -p '{"spec":{"dashboardConfig":{"mcpCatalog":true}}}'
+```
+
+Apply it after the dry run succeeds:
+
+```bash
+oc patch odhdashboardconfig odh-dashboard-config \
+  -n redhat-ods-applications \
+  --type=merge \
+  -p '{"spec":{"dashboardConfig":{"mcpCatalog":true}}}'
+```
+
+Check the result:
+
+```bash
+oc get odhdashboardconfig odh-dashboard-config \
+  -n redhat-ods-applications \
+  -o jsonpath='{.spec.dashboardConfig.mcpCatalog}{"\n"}'
+```
+
+Expected output:
+
+```text
+true
+```
+
+### Create the lab project
+
+Open Red Hat OpenShift AI from the application launcher in the upper-right corner of the OpenShift web console.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/06-open-rhoai.png"
+  alt="OpenShift application launcher showing Red Hat OpenShift AI"
+  caption="OpenShift AI opens in its own dashboard."
+/>
+
+In OpenShift AI, click **Projects > Create project**. Enter `mcp-exp` as the name and click **Create**.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/07-create-project.png"
+  alt="Red Hat OpenShift AI Create project dialog with mcp-exp entered as the name"
+  caption="The project keeps the lab's MCP server and supporting resources together."
+/>
+
+Checkpoint: confirm that `mcp-exp` appears in the OpenShift AI project list. Then open **AI hub > MCP servers** and confirm that the MCP catalog is available.
+
+## 2. Deploy a read-only OpenShift MCP server
+
+An MCP server describes tools and performs tool requests. The server pod uses its Kubernetes ServiceAccount when it calls the OpenShift API.
+
+### Create its ServiceAccount and guardrails
+
+Save the following as `01-openshift-mcp-prerequisites.yaml`:
+
+```yaml
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: mcp-viewer
+  namespace: mcp-exp
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: mcp-viewer-mcp-exp
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: view
+subjects:
+  - kind: ServiceAccount
+    name: mcp-viewer
+    namespace: mcp-exp
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openshift-mcp-server-config
+  namespace: mcp-exp
+data:
+  config.toml: |
+    log_level = 5
+    port = "8080"
+    read_only = true
+    toolsets = ["core", "config"]
+    cluster_auth_mode = "kubeconfig"
+```
+
+The ServiceAccount is the workload's identity. The `ClusterRoleBinding` gives this test workload cluster-wide read access.
+
+<div className="article-table" tabIndex={0} role="region" aria-label="OpenShift MCP server experiment settings">
+
+| Setting | Meaning in this lab |
+| --- | --- |
+| `ServiceAccount/mcp-viewer` | Identifies the MCP server pod and has the existing cluster-wide `view` binding. |
+| `read_only = true` | Limits the server to read-oriented MCP tools. |
+| `cluster_auth_mode = "kubeconfig"` | Makes the server use its in-cluster ServiceAccount credentials for OpenShift API requests. The server's default is `passthrough`, so this lab sets `kubeconfig` explicitly. |
+
+</div>
+
+Validate and apply the file:
+
+```bash
+oc apply --dry-run=server -f 01-openshift-mcp-prerequisites.yaml
+oc apply -f 01-openshift-mcp-prerequisites.yaml
+```
+
+Prove the permission boundary:
+
+```bash
+oc auth can-i list pods \
+  --as=system:serviceaccount:mcp-exp:mcp-viewer \
+  -n mcp-exp
+
+oc auth can-i delete pods \
+  --as=system:serviceaccount:mcp-exp:mcp-viewer \
+  -n mcp-exp
+```
+
+Expected output:
+
+```text
+yes
+no
+```
+
+### Deploy from the MCP catalog
+
+In OpenShift AI:
+
+1. Open **AI hub > MCP servers**.
+2. Open the **Catalog** tab.
+3. Open the Red Hat OpenShift MCP server entry.
+4. Click **Deploy MCP server**.
+5. In the deployment dialog, enter `mcp-server-test`, then select project `mcp-exp`.
+6. In the generated YAML, confirm that `runtime.security.serviceAccountName` is `mcp-viewer` and that the ConfigMap name is `openshift-mcp-server-config`.
+7. Keep the catalog-provided image and remaining YAML, then click **Deploy**.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/08-deploy-mcp-server.png"
+  alt="OpenShift AI Deploy MCP server dialog with mcp-server-test and project mcp-exp selected"
+  caption="The catalog creates an MCPServer object. The MCP Lifecycle Operator manages the resulting Deployment and Service."
+/>
+
+The `serviceAccountName` connects the server Pod to the `mcp-viewer` identity that you created in the previous step. The ConfigMap supplies the `config.toml` settings that you created for the server.
+
+Check it:
+
+```bash
+oc get mcpserver mcp-server-test -n mcp-exp
+oc get deployment,service,pod -n mcp-exp
+```
+
+Continue when the `MCPServer` reports `Ready=True` and its pod is running. Do not edit the generated Deployment; change the `MCPServer` or its ConfigMap instead.
+
+If the MCP server was already running before you updated `config.toml`, restart its pod once so that it reloads the file:
+
+```bash
+oc get pods -n mcp-exp
+export MCP_SERVER_POD='replace-with-mcp-server-pod-name'
+oc delete pod "${MCP_SERVER_POD}" -n mcp-exp
+oc get pods -n mcp-exp -w
+```
+
+Replace the value with the MCP server pod name. The managed Deployment creates a replacement. Continue when the new pod is running, then press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop watching.
+
+## 3. Install MCP Gateway
+
+MCP Gateway gives a client one MCP address even when several MCP servers sit behind it. This lab registers only one server so that the routing remains easy to see.
+
+### Create the OpenShift GatewayClass
+
+Save this as `02-gatewayclass.yaml`:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: openshift-default
+spec:
+  controllerName: openshift.io/gateway-controller/v1
+```
+
+Validate and apply it:
+
+```bash
+oc apply --dry-run=server -f 02-gatewayclass.yaml
+oc apply -f 02-gatewayclass.yaml
+oc get gatewayclass openshift-default
+```
+
+Continue when `GatewayClass/openshift-default` reports `Accepted=True`.
+
+### Install the MCP Gateway Operator
+
+In the OpenShift web console, open **Ecosystem > Software Catalog** and search for **MCP Gateway Operator**.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/09-mcp-gateway-operator.png"
+  alt="OpenShift Software Catalog showing MCP Gateway Operator Technology Preview"
+  caption="MCP Gateway Operator is a separate installation from Red Hat OpenShift AI."
+/>
+
+The installation dialog already selects the `preview` channel, version `0.7.1`, all namespaces, and `openshift-operators`. Leave these defaults in place and click **Install**. If your organization has a different update policy, follow it instead.
+
+<ArticleImage
+  src="/images/mcp-gateway-ols/10-mcp-gateway-install-settings.png"
+  alt="MCP Gateway Operator installation settings showing preview channel, all namespaces, and openshift-operators"
+  caption="This screenshot shows version 0.7.1. Use a newer 0.7 maintenance release only after checking its release notes."
+/>
+
+Operator Lifecycle Manager installs Red Hat Connectivity Link as a dependency. Use version 1.4.1 or later in the 1.4 stream; version 1.4.0 is deprecated.
+
+Check the installation and create a namespace for the Gateway extension:
+
+```bash
+oc get csv -n openshift-operators | grep -Ei 'mcp-gateway|rhcl|connectivity'
+oc get crd | grep mcp.kuadrant.io
+oc create namespace mcp-gateway --dry-run=client -o yaml | oc apply -f -
+```
+
+## 4. Configure and register the Gateway
+
+Five Kubernetes objects describe this setup:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="MCP Gateway configuration objects">
+
+| Object | Job |
+| --- | --- |
+| `GatewayClass` | Selects the OpenShift gateway controller |
+| `Gateway` | Declares the client-facing `mcp` listener and backend-facing `mcps` listener |
+| `MCPGatewayExtension` | Adds the MCP broker and router behavior |
+| `HTTPRoute` | Points to the backend MCP Service |
+| `MCPServerRegistration` | Adds the backend tools and the `openshift_` prefix |
+
+</div>
+
+The `Gateway` uses two logical listeners on port 8080. Their names must be unique:
+
+- `mcp` receives requests from MCP clients, including OpenShift Lightspeed.
+- `mcps` accepts the internally rerouted requests for registered backend MCP servers.
+
+The listener name describes its role, not a specific client product.
+
+Create the `Gateway`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-gateway-config
+  namespace: openshift-ingress
+data:
+  service: |
+    spec:
+      type: ClusterIP
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: mcp-gateway
+  namespace: openshift-ingress
+spec:
+  gatewayClassName: openshift-default
+  infrastructure:
+    parametersRef:
+      group: ""
+      kind: ConfigMap
+      name: mcp-gateway-config
+  listeners:
+    - name: mcp
+      hostname: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: mcps
+      hostname: "*.mcp.local"
+      port: 8080
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: All
+```
+
+The `mcp-gateway-config` ConfigMap asks the Gateway controller to create a `ClusterIP` Service. This gives OpenShift Lightspeed an internal cluster address for the Gateway without publishing the Gateway to the internet. That is especially important in this lab because the MCP server uses a ServiceAccount with cluster-wide read access. You will use `oc port-forward` when you need temporary access from your computer for the direct protocol check.
+
+Save it as `03-gateway.yaml`, then validate and apply it:
+
+```bash
+oc apply --dry-run=server -f 03-gateway.yaml
+oc apply -f 03-gateway.yaml
+oc wait gateway/mcp-gateway -n openshift-ingress \
+  --for=condition=Programmed --timeout=5m
+```
+
+The Gateway controller creates the Service only after the `Gateway` exists, so you cannot look it up before this step. The listener hostname and Service are related: the hostname must resolve to the generated Service inside the cluster. Find that Service now instead of assuming its name:
+
+```bash
+oc get service -n openshift-ingress \
+  -l gateway.networking.k8s.io/gateway-name=mcp-gateway
+```
+
+This article expects `mcp-gateway-openshift-default`, which matches the hostname in the `mcp` listener. If your Service has another name, replace the hostname in the remaining YAML before you continue.
+
+Create the extension and its cross-namespace permission:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-mcp-gateway-extension
+  namespace: openshift-ingress
+spec:
+  from:
+    - group: mcp.kuadrant.io
+      kind: MCPGatewayExtension
+      namespace: mcp-gateway
+  to:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: mcp-gateway
+---
+apiVersion: mcp.kuadrant.io/v1alpha1
+kind: MCPGatewayExtension
+metadata:
+  name: mcp-gateway-extension
+  namespace: mcp-gateway
+spec:
+  httpRouteManagement: Enabled
+  privateHost: http://mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local:8080
+  publicHost: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: Gateway
+    name: mcp-gateway
+    namespace: openshift-ingress
+    sectionName: mcp
+```
+
+Save it as `04-mcp-gateway-extension.yaml`, then validate, apply, and wait:
+
+```bash
+oc apply --dry-run=server -f 04-mcp-gateway-extension.yaml
+oc apply -f 04-mcp-gateway-extension.yaml
+oc wait mcpgatewayextension/mcp-gateway-extension -n mcp-gateway \
+  --for=condition=Ready --timeout=5m
+oc get httproute mcp-gateway-route -n mcp-gateway
+```
+
+The controller creates `HTTPRoute/mcp-gateway-route`. It sends client requests for `/mcp` to the broker.
+
+Finally, register the OpenShift MCP server:
+
+```yaml
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-server-test-route
+  namespace: mcp-exp
+  labels:
+    mcp-server: "true"
+spec:
+  hostnames:
+    - mcp-server-test.mcp.local
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: mcp-gateway
+      namespace: openshift-ingress
+      sectionName: mcps
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      backendRefs:
+        - name: mcp-server-test
+          port: 8080
+---
+apiVersion: mcp.kuadrant.io/v1alpha1
+kind: MCPServerRegistration
+metadata:
+  name: mcp-server-test
+  namespace: mcp-exp
+spec:
+  path: /mcp
+  prefix: openshift_
+  targetRef:
+    group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: mcp-server-test-route
+```
+
+Save it as `05-register-openshift-mcp.yaml`, then run:
+
+```bash
+oc apply --dry-run=server -f 05-register-openshift-mcp.yaml
+oc apply -f 05-register-openshift-mcp.yaml
+oc wait mcpserverregistration/mcp-server-test -n mcp-exp \
+  --for=condition=Ready --timeout=5m
+
+oc get mcpserverregistration mcp-server-test -n mcp-exp \
+  -o jsonpath='ready={.status.conditions[?(@.type=="Ready")].status}{"\n"}'
+```
+
+The `MCPServerRegistration` name does not have to match the `MCPServer` name. This lab uses `mcp-server-test` for both so that the resources are easy to match. The actual connection comes from the registration's `targetRef` to the `HTTPRoute`, and from that route's `backendRefs` to the MCP server Service.
+
+The `openshift_` prefix does two jobs: it prevents a tool-name collision and tells the router which backend owns the call. A backend tool named `pods_list_in_namespace` appears to clients as `openshift_pods_list_in_namespace`.
+
+## 5. Understand the two request paths
+
+The Kubernetes objects configure the runtime before OpenShift Lightspeed sends a request. The controllers turn the `Gateway`, `HTTPRoute`, `MCPGatewayExtension`, and `MCPServerRegistration` objects into Envoy, broker, and router configuration. Those objects do not carry live MCP messages.
+
+At runtime, every MCP message reaches the same Gateway URL. The JSON-RPC `method` field tells the Gateway whether the client wants the catalog or wants to run one tool.
+
+### Path 1: list the tools
+
+OpenShift Lightspeed sends `tools/list` to learn which tools the registered MCP server offers:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 21,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+```text
+1. OpenShift Lightspeed sends an MCP request to the Gateway's `/mcp` endpoint.
+2. Envoy receives the request.
+3. The MCP router recognizes `tools/list` and sends it to the broker.
+4. The broker reads the registered server's shared catalog.
+5. The MCP server returns its tool descriptions. It does not run a tool.
+6. The broker adds `openshift_` and returns the combined catalog.
+```
+
+The broker handles the client-facing `tools/list` request. It combines the registered server's tool descriptions into one catalog and adds each registration's prefix.
+
+No OpenShift tool runs on this path. The backend is contacted only to describe the tools available through this Gateway.
+
+### Path 2: call one tool
+
+OpenShift Lightspeed can then call one name from that catalog:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 22,
+  "method": "tools/call",
+  "params": {
+    "name": "openshift_pods_list_in_namespace",
+    "arguments": {
+      "namespace": "mcp-exp"
+    }
+  }
+}
+```
+
+The `openshift_` prefix selects the registered backend:
+
+```text
+1. Envoy receives `tools/call` for `openshift_pods_list_in_namespace`.
+2. The router maps openshift_ to mcp-exp/mcp-server-test.
+3. The router removes openshift_ from the tool name.
+4. The router supplies the backend hostname mcp-server-test.mcp.local.
+5. Envoy matches mcp-server-test-route.
+6. Envoy forwards the HTTP request to Service/mcp-server-test:8080.
+7. The MCP server runs the read-only tool.
+8. The OpenShift API checks the MCP server ServiceAccount and returns the permitted data.
+```
+
+The important transformation is:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="MCP tool call before and after routing">
+
+| Value | Before routing | At the backend |
+| --- | --- | --- |
+| Tool name | `openshift_pods_list_in_namespace` | `pods_list_in_namespace` |
+| Hostname | Gateway Service hostname | `mcp-server-test.mcp.local` |
+| Destination | Not selected | `Service/mcp-server-test:8080` |
+
+</div>
+
+The router changes the routing hostname and removes the registration prefix. Envoy evaluates the routes again and forwards the HTTP request. The MCP server receives its original tool name, `pods_list_in_namespace`, and the result returns through the same components to OpenShift Lightspeed.
+
+## 6. Prove the Gateway before editing OpenShift Lightspeed
+
+Find the generated Gateway Service and start a local tunnel:
+
+```bash
+export MCP_GATEWAY_SERVICE="$(oc get service \
+  -n openshift-ingress \
+  -l gateway.networking.k8s.io/gateway-name=mcp-gateway \
+  -o jsonpath='{.items[0].metadata.name}')"
+
+oc port-forward -n openshift-ingress \
+  service/"${MCP_GATEWAY_SERVICE}" 18080:8080
+```
+
+Keep that terminal open. In a second terminal, set the internal hostname:
+
+```bash
+export MCP_GATEWAY_HOST=mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local
+```
+
+Initialize an MCP session:
+
+```bash
+curl --noproxy '*' -sS \
+  -D /tmp/mcp-initialize.headers \
+  -o /tmp/mcp-initialize.body \
+  -w 'initialize HTTP=%{http_code}\n' \
+  -X POST http://127.0.0.1:18080/mcp \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"gateway-lab","version":"1.0"}}}'
+
+export MCP_SESSION_ID="$(awk 'BEGIN{IGNORECASE=1} /^mcp-session-id:/ {gsub("\r", "", $2); print $2}' /tmp/mcp-initialize.headers)"
+test -n "${MCP_SESSION_ID}" && printf 'MCP session initialized.\n'
+```
+
+Tell the server that initialization is complete:
+
+```bash
+curl --noproxy '*' -sS -o /dev/null \
+  -w 'initialized HTTP=%{http_code}\n' \
+  -X POST http://127.0.0.1:18080/mcp \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -H "Mcp-Session-Id: ${MCP_SESSION_ID}" \
+  -d '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+```
+
+Now list the tools:
+
+```bash
+curl --noproxy '*' -sS \
+  -o /tmp/mcp-tools.body \
+  -w 'tools/list HTTP=%{http_code}\n' \
+  -X POST http://127.0.0.1:18080/mcp \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -H "Mcp-Session-Id: ${MCP_SESSION_ID}" \
+  -d '{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}'
+
+grep -o 'openshift_[A-Za-z0-9_.-]*' /tmp/mcp-tools.body | sort -u
+```
+
+Continue only when `initialize` and `tools/list` return HTTP 200, the initialized notification returns a successful 2xx status, and at least one tool starts with `openshift_`.
+
+Call one read-only tool through the same session:
+
+```bash
+curl --noproxy '*' -sS \
+  -o /tmp/mcp-tool-call.body \
+  -w 'tools/call HTTP=%{http_code}\n' \
+  -X POST http://127.0.0.1:18080/mcp \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'MCP-Protocol-Version: 2025-11-25' \
+  -H "Mcp-Session-Id: ${MCP_SESSION_ID}" \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"openshift_pods_list_in_namespace","arguments":{"namespace":"mcp-exp"}}}'
+```
+
+Expected result: `tools/call HTTP=200`. The response in `/tmp/mcp-tool-call.body` contains the pod list returned by the OpenShift MCP server. This proves the complete Gateway path: broker discovery, router selection, the backend route, and a read-only tool call.
+
+## 7. Connect OpenShift Lightspeed
+
+OpenShift Lightspeed has a built-in cluster-introspection path when `spec.ols.introspectionEnabled` is true. This lab adds a second path:
+
+```text
+Built-in path
+OLS -> Operator-managed OpenShift MCP server -> OpenShift API
+
+Custom path in this lab
+OLS -> MCP Gateway -> registered OpenShift MCP server -> OpenShift API
+```
+
+Leave the built-in path unchanged for the first test. The `openshift_` prefix is your evidence that Lightspeed selected the custom Gateway path.
+
+Back up the existing object locally:
+
+```bash
+oc get olsconfig cluster -o yaml > olsconfig-before-mcp-gateway.yaml
+```
+
+Do not commit this backup. It can contain internal configuration references.
+
+Edit the existing object:
+
+```bash
+oc edit olsconfig cluster
+```
+
+Merge this fragment under the existing `spec`:
+
+```yaml
+spec:
+  featureGates:
+    - MCPServer
+  mcpServers:
+    - name: openshift-mcp-gateway
+      url: http://mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local:8080/mcp
+      timeout: 30
+```
+
+This is a fragment, not a complete `OLSConfig`. Keep the existing `spec.llm`, `spec.ols`, feature gates, and MCP servers. Add `MCPServer` only once. OpenShift Lightspeed sends its MCP requests to the internal Gateway URL shown here.
+
+Wait for the app server:
+
+```bash
+oc rollout status deployment/lightspeed-app-server \
+  -n openshift-lightspeed --timeout=10m
+```
+
+Start a new OpenShift Lightspeed conversation and make a quick read-only check:
+
+```text
+Use openshift_pods_list_in_namespace to list pods in mcp-exp. Do not create, update, or delete anything.
+```
+
+Approve only a read-only tool whose name and arguments match the request.
+
+The final checkpoint needs two pieces of evidence:
+
+- the protocol test returned one or more `openshift_` tools through MCP Gateway;
+- OpenShift Lightspeed called an `openshift_` tool and returned pod data from `mcp-exp`.
+
+### Optional: use only the Gateway path
+
+After the custom Gateway path works, you can disable the built-in OpenShift MCP server so that OLS gets cluster tools only through the Gateway. Set `introspectionEnabled` to `false`, not `true`:
+
+```bash
+oc edit olsconfig cluster
+```
+
+Merge this value into the existing `spec.ols` section and preserve its other fields:
+
+```yaml
+spec:
+  ols:
+    introspectionEnabled: false
+```
+
+This disables only the built-in path. It does not remove the custom `spec.mcpServers` entry that points to MCP Gateway.
+
+## Final thoughts
+
+OpenShift Lightspeed now uses one Gateway URL to reach the registered OpenShift MCP server. The broker publishes a prefixed tool catalog, and the router sends each tool call through Envoy to the matching backend. A platform team can register another MCP server behind the same Gateway without adding another server URL to OpenShift Lightspeed.
+
+The OpenShift MCP server provides and runs the OpenShift tools. In this lab, `read_only = true` exposes only tools marked as read-only. When a tool needs cluster data, the server calls the OpenShift API as the `mcp-viewer` ServiceAccount. OpenShift RBAC then allows or denies that API request. MCP Gateway does not read the cluster itself: its broker combines the registered tools into one list, and its router sends each tool call to the correct MCP server.
+
+The shared entry point gives a platform team one place to attach authentication and tool-level authorization. The team can apply rate limits at the Gateway. With OpenTelemetry configured, operators can inspect logs, metrics, traces, and an audit trail across the request path. This lab does not configure those controls. Later labs will add them one at a time and explain how each feature works.
+
+A follow-up article will explain how MCP Gateway works by tracing `tools/list` and `tools/call` through Envoy, the broker, the router, and the backend MCP server.
+
+## Sources and learn more
+
+- [Enable MCP server lifecycle management in OpenShift AI](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_the_mcp_catalog/enabling-mcp-lifecycle-management)
+- [Configure Gateway API in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/configuring-gateway-api)
+- [Install MCP Gateway](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/install_the_mcp_gateway/mcp-gateway-install)
+- [MCP Gateway architecture and benefits](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/mcp_gateway/mcp-gateway-introduction)
+- [Register MCP servers and configure policies](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/index)
+- [Configure MCP Gateway authentication](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/mcp-gateway-authentication)
+- [Observe MCP Gateway connections](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/observability/mcp-gateway-observe)
+- [Upstream MCP server registration guide](https://github.com/Kuadrant/mcp-gateway/blob/main/docs/guides/register-mcp-servers.md)
+- [OpenShift MCP server configuration](https://github.com/openshift/openshift-mcp-server/blob/release-0.4/docs/configuration.md)
+- [Understanding and creating service accounts in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/authentication_and_authorization/understanding-and-creating-service-accounts)
+- [Configure a custom MCP server in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed)
+- [Model Context Protocol architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture)
+
+*Sources checked: 2026-09-22*
