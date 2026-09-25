@@ -1,0 +1,301 @@
+<figure class="request-paths" aria-labelledby="request-paths-title" aria-describedby="request-paths-description">
+  <figcaption id="request-paths-title">One Gateway endpoint, two request paths</figcaption>
+  <p id="request-paths-description" class="request-paths__intro">
+    Read from top to bottom. Both requests use the same entry point; the method determines their destination.
+  </p>
+
+  <div class="request-paths__client">
+    <svg class="request-paths__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+      <path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H9l-5 3v-3a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" />
+      <path d="M7 9h10M7 13h6" />
+    </svg>
+    <div>
+      <strong>OpenShift Lightspeed</strong>
+      <span>Sends an MCP request</span>
+    </div>
+    <code>POST /mcp</code>
+  </div>
+
+  <div class="request-paths__entry">
+    <span class="request-paths__down" aria-hidden="true"></span>
+    <span>Through the <code>mcp</code> listener</span>
+  </div>
+
+  <div class="request-paths__processing" aria-label="Envoy consults the MCP router before forwarding the request">
+    <div class="request-paths__envoy">
+      <strong>Gateway proxy</strong>
+      <span class="request-paths__engine">Envoy</span>
+      <p>Receives and forwards the request</p>
+    </div>
+
+    <div class="request-paths__exchange" aria-hidden="true">
+      <span>Inspect</span>
+      <svg viewBox="0 0 64 32" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 8h58m-6-6 6 6-6 6M62 24H4m6-6-6 6 6 6" />
+      </svg>
+      <span>Return</span>
+    </div>
+
+    <div class="request-paths__router">
+      <strong>MCP router</strong>
+      <span class="request-paths__engine"><code>ext_proc</code></span>
+      <p>Reads the method and sets routing information</p>
+    </div>
+  </div>
+
+  <div class="request-paths__branch">
+    <p>Envoy matches the route, then forwards the request</p>
+    <span class="request-paths__trunk" aria-hidden="true"></span>
+    <span class="request-paths__crossbar" aria-hidden="true"></span>
+    <span class="request-paths__outlet request-paths__outlet--list" aria-hidden="true"></span>
+    <span class="request-paths__outlet request-paths__outlet--call" aria-hidden="true"></span>
+  </div>
+
+  <div class="request-paths__columns">
+    <section class="request-paths__path request-paths__path--list" aria-labelledby="list-path-title">
+      <header>
+        <span class="request-paths__number" aria-hidden="true">1</span>
+        <div>
+          <strong id="list-path-title">Discover tools</strong>
+          <code>tools/list</code>
+        </div>
+      </header>
+      <ol class="request-paths__steps">
+        <li class="request-paths__routing">
+          <span class="request-paths__label">Routing information</span>
+          <strong>Keep the Gateway hostname</strong>
+          <p>The JSON body stays the same.</p>
+        </li>
+        <li class="request-paths__route">
+          <span class="request-paths__label">Matching HTTPRoute</span>
+          <strong><code>mcp-gateway-route</code></strong>
+        </li>
+        <li class="request-paths__destination">
+          <span class="request-paths__label">Destination</span>
+          <strong>MCP broker</strong>
+          <p>Returns the combined tool catalog</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="request-paths__path request-paths__path--call" aria-labelledby="call-path-title">
+      <header>
+        <span class="request-paths__number" aria-hidden="true">2</span>
+        <div>
+          <strong id="call-path-title">Run a tool</strong>
+          <code>tools/call</code>
+        </div>
+      </header>
+      <ol class="request-paths__steps">
+        <li class="request-paths__routing">
+          <span class="request-paths__label">Routing information</span>
+          <strong>Set the backend hostname</strong>
+          <p>Remove <code>openshift_</code> from the tool name.</p>
+        </li>
+        <li class="request-paths__route">
+          <span class="request-paths__label">Matching HTTPRoute</span>
+          <strong><code>mcp-server-test-route</code></strong>
+        </li>
+        <li class="request-paths__destination">
+          <span class="request-paths__label">Destination</span>
+          <strong>OpenShift MCP server</strong>
+          <p>Runs the Pod-listing tool</p>
+        </li>
+      </ol>
+    </section>
+  </div>
+
+  <p class="request-paths__note">
+    The router supplies routing information. Envoy carries the request to the broker or the MCP server.
+  </p>
+</figure>
+
+<style>
+  .request-paths {
+    --flow-gap: 3.5rem;
+    --lane-center: calc((100% - var(--flow-gap)) / 4);
+    container-type: inline-size;
+    margin: 2rem 0;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 0.75rem;
+    background: var(--paper);
+  }
+
+  .request-paths figcaption {
+    max-width: none;
+    font: 700 clamp(1.3rem, 3vw, 1.6rem) / 1.25 var(--font-heading);
+    text-wrap: wrap;
+  }
+
+  .request-paths p { margin: 0; }
+
+  .request-paths .request-paths__intro {
+    margin: 0.65rem 0 1.5rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .request-paths code {
+    padding: 0;
+    color: inherit;
+    background: transparent;
+    font-size: 0.82rem;
+    overflow-wrap: anywhere;
+  }
+
+  .request-paths__client {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 1rem;
+    border: 1px solid var(--rule);
+    border-radius: 0.5rem;
+    background: var(--chrome);
+  }
+
+  .request-paths__icon { width: 1.8rem; flex: 0 0 1.8rem; }
+  .request-paths__client > div { flex: 1 1 10rem; }
+  .request-paths__client strong { display: block; font-size: 1rem; }
+  .request-paths__client span { color: var(--muted); font-size: 0.85rem; }
+  .request-paths__client > code { padding: 0.3rem 0.5rem; border: 1px solid var(--rule); border-radius: 0.25rem; background: var(--paper); }
+
+  .request-paths__entry {
+    position: relative;
+    min-height: 3.25rem;
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+
+  .request-paths__entry > span:last-child {
+    position: absolute;
+    top: 50%;
+    left: calc(50% + 0.75rem);
+    right: 0;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .request-paths__down {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    width: 0;
+    color: var(--rh-red-dark);
+  }
+
+  .request-paths__down::before,
+  .request-paths__outlet::before {
+    position: absolute;
+    inset: 0 auto 5px -0.75px;
+    border-left: 1.5px solid currentColor;
+    content: '';
+  }
+
+  .request-paths__down::after,
+  .request-paths__outlet::after {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top: 6px solid currentColor;
+    border-bottom: 0;
+    content: '';
+  }
+
+  .request-paths__processing { display: grid; grid-template-columns: 1fr; align-items: center; }
+  .request-paths__envoy,
+  .request-paths__router { min-width: 0; padding: 1rem; border-radius: 0.5rem; text-align: center; }
+  .request-paths__envoy { border: 2px solid var(--rh-red-dark); }
+  .request-paths__router { border: 1px dashed #74777a; background: var(--chrome); }
+  .request-paths__processing strong { display: block; font: 700 1.12rem / 1.3 var(--font-heading); }
+  .request-paths__engine { display: block; margin-top: 0.2rem; color: var(--muted); font-size: 0.85rem; }
+  .request-paths__processing p { margin-top: 0.55rem; font-size: 0.88rem; line-height: 1.45; }
+
+  .request-paths__exchange { display: flex; flex-direction: row-reverse; align-items: center; justify-content: center; gap: 0.5rem; height: 3.25rem; color: var(--muted); font-size: 0.75rem; }
+  .request-paths__exchange svg { width: 2.6rem; height: 2rem; transform: rotate(90deg); }
+
+  .request-paths__branch { margin: 1rem 0 0.85rem; text-align: center; }
+  .request-paths__branch p { color: var(--muted); font-size: 0.85rem; line-height: 1.45; }
+  .request-paths__branch > span { display: none; }
+
+  .request-paths__columns { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+  .request-paths__path { --path-color: #0055aa; --path-tint: #e7f1fa; min-width: 0; overflow: hidden; border: 1px solid var(--rule); border-top: 3px solid var(--path-color); border-radius: 0.5rem; }
+  .request-paths__path--call { --path-color: #a60000; --path-tint: #fce8e8; }
+  .request-paths__path header { display: flex; align-items: center; gap: 0.75rem; padding: 1rem; background: var(--path-tint); }
+  .request-paths__number { display: grid; place-items: center; flex: 0 0 1.75rem; height: 1.75rem; color: var(--path-color); border: 1px solid currentColor; border-radius: 50%; font-size: 0.8rem; font-weight: 700; }
+  .request-paths__path header strong { display: block; margin-bottom: 0.2rem; font: 700 1.05rem / 1.3 var(--font-heading); }
+  .request-paths__path header code { color: var(--path-color); }
+
+  .request-paths .request-paths__steps { display: grid; gap: 1.2rem; margin: 0; padding: 1rem; list-style: none; }
+  .request-paths__steps li { position: relative; display: grid; align-content: start; gap: 0.3rem; margin: 0; padding: 0 0 0.6rem; font-size: 0.9rem; line-height: 1.45; }
+  .request-paths__steps li + li::before {
+    position: absolute;
+    top: -1.2rem;
+    left: calc(50% - 0.75px);
+    height: 0.65rem;
+    border-left: 1.5px solid var(--path-color);
+    content: '';
+  }
+  .request-paths__steps li + li::after {
+    position: absolute;
+    top: -0.6rem;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 3px solid transparent;
+    border-top: 5px solid var(--path-color);
+    border-bottom: 0;
+    content: '';
+  }
+  .request-paths__label { color: var(--muted); font-size: 0.75rem; }
+  .request-paths__steps strong { font-size: 0.92rem; font-weight: 600; }
+  .request-paths__steps p { color: var(--muted); font-size: 0.84rem; }
+  .request-paths__steps .request-paths__routing,
+  .request-paths__steps .request-paths__route {
+    margin-inline: -1rem;
+    padding: 0.75rem 1rem;
+    background: #f1eef8;
+  }
+  .request-paths__route code {
+    color: var(--path-color);
+    font-size: 0.88rem;
+    font-weight: 700;
+  }
+  .request-paths__steps .request-paths__destination { margin-inline: -1rem; margin-bottom: -1rem; padding: 0.8rem 1rem 1rem; border-top: 1px solid var(--rule); background: var(--path-tint); }
+  .request-paths__destination strong { color: var(--path-color); font-size: 1rem; }
+
+  .request-paths .request-paths__note { margin-top: 1.1rem; padding-top: 0.9rem; color: var(--muted); border-top: 1px solid var(--rule); font-size: 0.85rem; line-height: 1.5; }
+
+  @container (min-width: 540px) {
+    .request-paths__down { left: var(--lane-center); }
+    .request-paths__entry > span:last-child { left: calc(var(--lane-center) + 0.8rem); }
+    .request-paths__processing { grid-template-columns: minmax(0, 1fr) var(--flow-gap) minmax(0, 1fr); }
+    .request-paths__envoy,
+    .request-paths__router { align-self: stretch; display: flex; flex-direction: column; justify-content: center; }
+    .request-paths__exchange { display: grid; align-content: center; gap: 0.15rem; height: auto; text-align: center; }
+    .request-paths__exchange svg { width: 100%; height: 1.75rem; transform: none; }
+    .request-paths__branch { position: relative; height: 5rem; margin: 0; color: #74777a; }
+    .request-paths__branch p {
+      position: absolute;
+      top: 0.45rem;
+      left: calc(var(--lane-center) + 0.9rem);
+      right: 0;
+      text-align: left;
+    }
+    .request-paths__branch > span { display: block; position: absolute; }
+    .request-paths__trunk { top: 0; bottom: 1.5rem; left: var(--lane-center); width: 0; border-left: 1.5px solid currentColor; transform: translateX(-0.75px); }
+    .request-paths__crossbar { bottom: 1.5rem; left: var(--lane-center); right: var(--lane-center); border-top: 1.5px solid currentColor; }
+    .request-paths__outlet { bottom: 0; height: 1.5rem; width: 0; }
+    .request-paths__outlet--list { left: var(--lane-center); }
+    .request-paths__outlet--call { right: var(--lane-center); }
+    .request-paths__columns { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--flow-gap); }
+    .request-paths__path { display: grid; grid-template-rows: auto 1fr; }
+    .request-paths .request-paths__steps { grid-template-rows: minmax(6rem, auto) minmax(3.5rem, auto) 1fr; }
+  }
+</style>

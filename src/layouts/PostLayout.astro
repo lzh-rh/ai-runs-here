@@ -58,12 +58,12 @@ const formatDate = (date: Date) =>
       <p class="eyebrow">{topic.label}</p>
       <h1>{post.data.title}</h1>
       <p class="lead">{post.data.description}</p>
-      <p class="article-meta">
+      <div class="article-meta" role="group" aria-label="Article details" tabindex="0">
         <span>{post.data.draft ? 'Draft preview' : post.data.kind === 'lab' ? 'Lab' : 'Guide'}</span>
         <span>{post.data.difficulty}</span>
         <span>{post.data.estimatedMinutes} minutes</span>
         <time datetime={post.data.publishedDate.toISOString()}>{formatDate(post.data.publishedDate)}</time>
-      </p>
+      </div>
     </header>
 
     {tableOfContents.length > 0 && (

@@ -1,0 +1,313 @@
+---
+kind: guide
+title: Understanding MCP Gateway and its request paths
+description: Follow two OpenShift Lightspeed requests through the MCP router, broker, Envoy proxy, and one MCP server.
+publishedDate: 2026-09-25
+updatedDate: 2026-09-25
+topic: mcp-gateway
+tags:
+  - MCP Gateway
+  - Model Context Protocol
+  - OpenShift Lightspeed
+  - Envoy
+  - Gateway API
+difficulty: beginner
+estimatedMinutes: 10
+tocDepth: 3
+testedVersions:
+  - MCP Gateway Operator 0.7.1
+  - Red Hat Connectivity Link 1.4.1
+  - MCP protocol 2025-11-25
+prerequisites:
+  - The completed OpenShift Lightspeed and MCP Gateway beginner lab, or a similar configured environment
+draft: false
+featured: false
+---
+
+import ArticleCallout from '../../components/ArticleCallout.astro';
+import McpGatewayRequestPaths from '../../components/McpGatewayRequestPaths.astro';
+
+You ask OpenShift Lightspeed:
+
+> List the Pods in the `mcp-exp` project.
+
+To answer, Lightspeed needs to read Pod information from your cluster. The OpenShift MCP server provides a **tool** for that operation. Model Context Protocol (MCP) gives applications a shared format for discovering tools and calling them.
+
+MCP Gateway provides one URL for the two requests Lightspeed needs:
+
+- `tools/list` asks, “Which tools can I use?”
+- `tools/call` asks, “Run this tool with these inputs.”
+
+You can connect multiple MCP servers behind that endpoint. This example uses one OpenShift MCP server.
+
+Follow [Integrate MCP Gateway with OpenShift Lightspeed: a beginner lab](https://lzh-rh.github.io/ai-runs-here/articles/connect-openshift-lightspeed-to-mcp-gateway/) for the installation steps. You can read this explanation alongside the lab and match the resource names to your setup.
+
+<ArticleCallout variant="important" title="Important">
+  <p>MCP gateway is a Technology Preview feature only. Technology Preview features are not supported with Red Hat production service level agreements (SLAs) and might not be functionally complete. Red Hat does not recommend using them in production. These features offer early access to upcoming product features, enabling customers to test functionality and give feedback during the development process.</p>
+  <p>For more information about the support scope of Red Hat Technology Preview features, see <a href="https://access.redhat.com/support/offerings/techpreview/">Technology Preview Features Support Scope</a>.</p>
+</ArticleCallout>
+
+## Meet the MCP Gateway components
+
+Think of the tool catalog as a menu: the broker supplies the menu, and the backend server runs the selected tool. The other components connect Lightspeed to those destinations:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Simple MCP Gateway component model">
+
+| Component | Beginner-friendly meaning |
+| --- | --- |
+| **OpenShift Lightspeed** | The MCP client. It asks to list or call tools. |
+| **Gateway proxy (Envoy)** | Receives the HTTP request and forwards it using the configured routing rules. |
+| **MCP router** | Reads the MCP message and supplies the routing information Envoy needs. |
+| **MCP broker** | Returns one combined catalog of tools from registered servers. |
+| **Backend MCP server** | Performs the real operation, such as listing Pods. |
+
+</div>
+
+To connect these components, you describe the server and its routes in Kubernetes configuration objects.
+
+## Connect the configuration to the tool catalog
+
+In the linked lab, the OpenShift MCP server runs in the `mcp-exp` project. You connect it to the Gateway with an `MCPGatewayExtension`, a backend `HTTPRoute`, and an `MCPServerRegistration`. The MCP Gateway **controller** watches those objects and prepares the runtime configuration.
+
+### 1. Enable the Gateway's MCP entry point
+
+You create an `MCPGatewayExtension` that points to the `mcp` listener on `Gateway/mcp-gateway`. A listener is an entry point where the Gateway accepts requests.
+
+The controller reads that instruction and configures MCP processing. With route management enabled, it also creates `mcp-gateway-route`, the client-facing route to the broker:
+
+```text
+MCPGatewayExtension
+  → controller configures the mcp listener
+  → controller creates mcp-gateway-route → broker
+```
+
+An **HTTPRoute** is a rule that matches a request's hostname and path and tells Envoy where to send it. This first route leads to the broker. You also need a route to the server that runs the tools.
+
+### 2. Describe the route to your MCP server
+
+You define that second route as `HTTPRoute/mcp-server-test-route`. It matches hostname `mcp-server-test.mcp.local` and path `/mcp`, and tells Envoy to forward the request to `Service/mcp-server-test:8080`. A Kubernetes **Service** provides a stable address for the server's running Pod; `8080` is its port.
+
+The backend route attaches to the same Gateway through its `mcps` listener. The lab uses two listener names: `mcp` for client requests and `mcps` for backend-server routes. Both use HTTP on port `8080`.
+
+### 3. Register the server using that route
+
+With the route defined, you register the server so the Gateway can discover its tools. You create `MCPServerRegistration/mcp-server-test` with these fields:
+
+- `targetRef` points to `mcp-server-test-route` from step 2.
+- `path: /mcp` specifies the server's MCP endpoint path.
+- `prefix: openshift_` gives its tools a shared prefix in the Gateway catalog.
+
+The controller follows that reference to find the server's connection details, then prepares the configuration that the broker and router use:
+
+```text
+MCPServerRegistration/mcp-server-test
+  │ targetRef: mcp-server-test-route
+  ▼
+HTTPRoute/mcp-server-test-route
+  │ backendRefs: mcp-server-test, port 8080
+  ▼
+Service/mcp-server-test → OpenShift MCP server
+```
+
+The controller reads these references through the Kubernetes API to find the Gateway for this server:
+
+```text
+MCPServerRegistration/mcp-server-test
+  └─ targetRef → HTTPRoute/mcp-server-test-route
+                  └─ parentRefs → Gateway/mcp-gateway
+                                   listener mcps, port 8080
+
+MCPGatewayExtension/mcp-gateway-extension
+  └─ targetRef → Gateway/mcp-gateway
+                 listener mcp, port 8080
+```
+
+Read the two chains together:
+
+1. The registration points to the backend route. That route's `parentRefs` points to `Gateway/mcp-gateway` in `openshift-ingress`, through listener `mcps`.
+2. The controller checks the route's status for `Accepted=True`, confirming that the Gateway accepted the route's attachment.
+3. It finds a valid extension targeting that same Gateway. Here, the extension targets listener `mcp`.
+4. It checks the listener ports. `mcps` and `mcp` have different names, but both use `8080`, so this server's configuration belongs with this extension.
+
+The **same Gateway and matching listener port** connect the registration to the extension. After these checks, the controller writes the server's connection details into the configuration for that extension's broker and router. The upstream [registration-to-extension routing flow](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/docs/design/routing.md#mcpserverregistration-config-routing) documents the checks.
+
+### 4. Let the broker discover the tools
+
+The broker uses those connection details to complete an MCP handshake with the server, then sends `tools/list`. The server returns tool definitions, including the name `pods_list_in_namespace` and the inputs it accepts.
+
+The broker adds the registration's prefix when presenting this tool in its combined catalog:
+
+```text
+openshift_ + pods_list_in_namespace
+              ↓
+openshift_pods_list_in_namespace
+```
+
+The prefix distinguishes this server's tools from tools with the same names on other servers. The catalog entry is ready for Lightspeed to discover; no Pod-listing operation has run yet.
+
+The upstream [registration flow](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/docs/design/backend-mcp-management.md) describes the controller configuration and broker discovery steps.
+
+## Follow the two request paths
+
+With the routes and catalog ready, Lightspeed can use this setup to answer your question about Pods in `mcp-exp`:
+
+<McpGatewayRequestPaths />
+
+Both requests begin the same way. Lightspeed sends an HTTP request to `/mcp`, and Envoy receives it through the `mcp` listener. The request body uses **JSON-RPC**, a message format with a `method` such as `tools/list` or `tools/call`.
+
+Envoy's configured **external-processing filter**, `ext_proc`, passes that body to the MCP router. The router inspects it and returns routing information to Envoy. The two arrows between Envoy and the router show this exchange.
+
+The following examples start after Lightspeed completes its own MCP handshake with the Gateway. The headers and JSON body show each request before and after router processing. Tokens and session IDs are placeholders, and the after views show selected headers; omitted headers are not necessarily removed.
+
+## Path 1: list the tools
+
+Lightspeed asks for the tool names and input definitions in the catalog.
+
+### Before router processing
+
+```http
+POST /mcp HTTP/1.1
+Host: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local:8080
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-11-25
+Mcp-Session-Id: <gateway-session-id>
+
+{
+  "jsonrpc": "2.0",
+  "id": 21,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+Read the request in two parts. The headers identify the destination, accepted response formats, protocol version, and session. The JSON body identifies the operation: `method: tools/list`. The `id` lets the client match a response to this request.
+
+The `Host` header names the destination used for routing; the client connects on port `8080`. Envoy represents this value as `:authority` during processing. For `tools/list`, the router sets it to the Gateway's configured `publicHost`, which contains the hostname without the port in this lab. Envoy can then match the broker route.
+
+### After router processing
+
+The JSON body stays the same. The router adds headers identifying the method and the broker destination:
+
+```http
+POST /mcp HTTP/1.1
+Host: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-11-25
+Mcp-Session-Id: <gateway-session-id>
+X-Mcp-Method: tools/list
+X-Mcp-Servername: mcpBroker
+
+{
+  "jsonrpc": "2.0",
+  "id": 21,
+  "method": "tools/list",
+  "params": {}
+}
+```
+
+Envoy matches the Gateway hostname and `/mcp` to `mcp-gateway-route` and forwards the request to the broker. The broker returns its catalog through Envoy to Lightspeed.
+
+During setup, the broker sent `tools/list` to the backend. In this request, Lightspeed sends `tools/list` to the broker to retrieve the catalog.
+
+That response gives Lightspeed the name and inputs it needs for the next request.
+
+## Path 2: call a tool to list Pods
+
+### Before router processing
+
+Lightspeed uses the name it received from the catalog and supplies `mcp-exp` as the namespace. It sends the request to the same Gateway URL:
+
+```http
+POST /mcp HTTP/1.1
+Host: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local:8080
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-11-25
+Mcp-Session-Id: <gateway-session-id>
+
+{
+  "jsonrpc": "2.0",
+  "id": 22,
+  "method": "tools/call",
+  "params": {
+    "name": "openshift_pods_list_in_namespace",
+    "arguments": {
+      "namespace": "mcp-exp"
+    }
+  }
+}
+```
+
+The router looks up the tool in the broker's catalog and finds its owner, `mcp-exp/mcp-server-test`. The [router implementation](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/internal/mcp-router/request_handlers.go) uses that server's routing configuration to make two routing changes:
+
+1. Removes `openshift_`, restoring the backend's tool name: `pods_list_in_namespace`.
+2. Sets the routing hostname, `:authority`, to `mcp-server-test.mcp.local`.
+
+### After router processing
+
+Compare the same `tools/call` request after processing. `Host` changes to the backend routing hostname. Inside the JSON body, `params.name` means the `name` field within `params`; the router removes its `openshift_` prefix. The method and namespace input stay the same:
+
+```http
+POST /mcp HTTP/1.1
+Host: mcp-server-test.mcp.local
+Content-Type: application/json
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-11-25
+Mcp-Session-Id: <backend-session-id>
+X-Mcp-Method: tools/call
+X-Mcp-Servername: mcp-exp/mcp-server-test
+X-Mcp-Toolname: pods_list_in_namespace
+
+{
+  "jsonrpc": "2.0",
+  "id": 22,
+  "method": "tools/call",
+  "params": {
+    "name": "pods_list_in_namespace",
+    "arguments": {
+      "namespace": "mcp-exp"
+    }
+  }
+}
+```
+
+The `X-Mcp-*` headers identify the method, owning server, and backend tool name. For a backend that uses sessions, the Gateway supplies the corresponding backend session ID.
+
+### Envoy forwards the call and returns the result
+
+The router asks Envoy to repeat route matching by clearing its saved route decision, called the **route cache**. Envoy matches `/mcp` and the rewritten hostname to `mcp-server-test-route`, whose hostname field contains:
+
+```yaml
+hostnames:
+  - mcp-server-test.mcp.local
+```
+
+The router changes the hostname; Envoy selects the matching route. The router does not select `mcp-server-test-route` by name.
+
+The request entered through `mcp`, while the backend route attaches to `mcps`. Both listeners use HTTP on port `8080` in this lab, so Envoy can match the backend route in the shared route table. The request stays inside the same proxy; it does not enter a second listener. The upstream [routing design](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/docs/design/routing.md) explains this configuration.
+
+Envoy forwards the call to `Service/mcp-server-test:8080`, which delivers it to the OpenShift MCP server. The server runs `pods_list_in_namespace` and queries the OpenShift API using its configured Kubernetes credentials.
+
+For an allowed call, the Pod information returns through Envoy to Lightspeed. Lightspeed can use that data to answer your original question about the `mcp-exp` project.
+
+## Final thoughts
+
+MCP Gateway gives Lightspeed one place to discover tools and call them, even when those tools belong to different servers. Asking for the menu reaches the broker; choosing a tool reaches the server that can run it. The router supplies the routing information, and Envoy forwards the request.
+
+In this example, the OpenShift MCP server lists Pods using its ServiceAccount permissions and returns the result to Lightspeed. You configure the route to reach that server and register it so the broker can discover its tools.
+
+## Sources and learn more
+
+- [Integrate MCP Gateway with OpenShift Lightspeed: a beginner lab](https://lzh-rh.github.io/ai-runs-here/articles/connect-openshift-lightspeed-to-mcp-gateway/)
+- [Technology Preview Features Support Scope](https://access.redhat.com/support/offerings/techpreview/)
+- [MCP Gateway architecture](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/mcp_gateway/mcp-gateway-introduction)
+- [Register MCP servers](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/mcp-gateway-register-on-prem-mcp-servers)
+- [MCP Gateway 0.7.1 routing design](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/docs/design/routing.md)
+- [MCP Gateway registration and backend discovery](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/docs/design/backend-mcp-management.md)
+- [MCP router request-handling implementation](https://github.com/Kuadrant/mcp-gateway/blob/f3a5a32f074b82804b45e1b54687e253934a5edf/internal/mcp-router/request_handlers.go)
+- [MCP tools specification](https://modelcontextprotocol.io/specification/2025-11-25/server/tools)
+- [MCP HTTP transport and session headers](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports)
+
+*Sources checked: 2026-09-25*
