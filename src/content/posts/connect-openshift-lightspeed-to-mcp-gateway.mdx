@@ -407,12 +407,11 @@ The installation dialog already selects the `preview` channel, version `0.7.1`, 
 
 Operator Lifecycle Manager installs Red Hat Connectivity Link as a dependency. Use version 1.4.1 or later in the 1.4 stream; version 1.4.0 is deprecated.
 
-Check the installation and create a namespace for the Gateway extension:
+Check the installation:
 
 ```bash
 oc get csv -n openshift-operators | grep -Ei 'mcp-gateway|rhcl|connectivity'
 oc get crd | grep mcp.kuadrant.io
-oc create namespace mcp-gateway --dry-run=client -o yaml | oc apply -f -
 ```
 
 ## 4. Configure and register the Gateway
@@ -501,6 +500,22 @@ oc get service -n openshift-ingress \
 This article expects `mcp-gateway-openshift-default`, which matches the hostname in the `mcp` listener. If your Service has another name, use `<service-name>.openshift-ingress.svc.cluster.local` wherever the lab uses this hostname. Update the `mcp` listener in `03-gateway.yaml` and reapply that file before continuing.
 
 ### Enable MCP processing
+
+First, create the `mcp-gateway` namespace for the Gateway extension. Save this as `04-mcp-gateway-namespace.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: mcp-gateway
+```
+
+Validate and apply it before continuing. The namespace must exist before the API server can validate the extension:
+
+```bash
+oc apply --dry-run=server -f 04-mcp-gateway-namespace.yaml
+oc apply -f 04-mcp-gateway-namespace.yaml
+```
 
 Create the extension and its cross-namespace permission:
 
