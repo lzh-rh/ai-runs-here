@@ -22,6 +22,9 @@ const tableOfContents = [
   ...headings.filter(({ depth }) => depth >= 2 && depth <= post.data.tocDepth)
 ];
 const topic = topicConfig[post.data.topic];
+const displayDate = post.data.draft
+  ? post.data.updatedDate ?? post.data.publishedDate
+  : post.data.publishedDate;
 const formatDate = (date: Date) =>
   new Intl.DateTimeFormat('en', { dateStyle: 'long', timeZone: 'UTC' }).format(date);
 ---
@@ -61,8 +64,8 @@ const formatDate = (date: Date) =>
       <div class="article-meta" role="group" aria-label="Article details" tabindex="0">
         <span>{post.data.draft ? 'Draft preview' : post.data.kind === 'lab' ? 'Lab' : 'Guide'}</span>
         <span>{post.data.difficulty}</span>
-        <span>{post.data.estimatedMinutes} minutes</span>
-        <time datetime={post.data.publishedDate.toISOString()}>{formatDate(post.data.publishedDate)}</time>
+        <span>{post.data.estimatedMinutes} {post.data.timeEstimateType === 'reading' ? 'min read' : post.data.timeEstimateType === 'completion' ? 'min lab' : 'minutes'}</span>
+        <time datetime={displayDate.toISOString()}>{formatDate(displayDate)}</time>
       </div>
     </header>
 

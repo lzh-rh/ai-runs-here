@@ -837,6 +837,15 @@ pre {
   word-break: normal;
 }
 
+.article-prose .article-table--wrap table {
+  table-layout: fixed;
+}
+
+.article-prose .article-table--wrap table :not(pre) > code {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .article-prose th,
 .article-prose td {
   padding: 0.55rem 0.7rem;

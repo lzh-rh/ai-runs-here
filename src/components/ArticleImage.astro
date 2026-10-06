@@ -5,12 +5,14 @@ interface Props {
   src: string;
   alt: string;
   caption: string;
+  width?: number;
+  height?: number;
 }
 
-const { src, alt, caption } = Astro.props;
+const { src, alt, caption, width, height } = Astro.props;
 ---
 
 <figure class="article-figure">
-  <img src={withBase(src)} alt={alt} loading="lazy" />
+  <img src={withBase(src)} alt={alt} width={width} height={height} loading="lazy" style={width && height ? 'height: auto' : undefined} />
   <figcaption>{caption}</figcaption>
 </figure>

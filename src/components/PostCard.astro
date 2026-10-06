@@ -22,7 +22,7 @@ const formattedDate = new Intl.DateTimeFormat('en', {
       {post.data.draft && <span>Draft preview</span>}
       <span>{topic.label}</span>
       <span>{kind}</span>
-      <span>{post.data.estimatedMinutes} min</span>
+      <span>{post.data.estimatedMinutes} {post.data.timeEstimateType === 'reading' ? 'min read' : post.data.timeEstimateType === 'completion' ? 'min lab' : 'min'}</span>
       <time datetime={date.toISOString()}>{formattedDate}</time>
     </p>
     <h3><a href={withBase(`/articles/${post.id}/`)}>{post.data.title}</a></h3>

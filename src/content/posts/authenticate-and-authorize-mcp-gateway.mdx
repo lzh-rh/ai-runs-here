@@ -1,0 +1,1040 @@
+---
+kind: lab
+title: "Authenticate and authorize MCP Gateway requests: a beginner lab"
+description: Use Keycloak and two AuthPolicy resources to require a valid identity and allow one user to run one OpenShift MCP tool.
+publishedDate: 2026-10-06
+updatedDate: 2026-10-06
+topic: mcp-gateway
+tags:
+  - OpenShift
+  - MCP Gateway
+  - Keycloak
+  - Authentication
+  - Authorization
+difficulty: beginner
+estimatedMinutes: 25
+timeEstimateType: reading
+tocDepth: 2
+testedVersions:
+  - OpenShift Container Platform 4.22.15
+  - MCP Gateway Operator 0.7.1
+  - OpenShift MCP server 0.4
+  - Red Hat Connectivity Link 1.4.3
+  - Red Hat build of Keycloak Operator 26.4.16-opr.1 (experimental combination)
+prerequisites:
+  - A learning cluster with the previous MCP Gateway lab completed
+  - Gateway listeners named mcp and mcps and a ready mcp-server-test registration
+  - A ready Keycloak instance and access to its Administration Console
+  - Cluster administrator access through oc
+  - Python 3, curl, jq, and two terminal windows
+draft: false
+featured: false
+---
+
+import ArticleCallout from '../../components/ArticleCallout.astro';
+import ArticleImage from '../../components/ArticleImage.astro';
+import McpGatewayAuthFlow from '../../components/McpGatewayAuthFlow.astro';
+import { withBase } from '../../config/site';
+
+You can use your existing MCP Gateway to list OpenShift Pods. In this lab, you will add two checks before the gateway forwards a request:
+
+1. **Authentication:** verify the caller's access token.
+2. **Authorization:** check whether the caller has permission to run the tool.
+
+You will create two Keycloak users, `mcp-reader` and `mcp-no-tools`, and test the same Pod-list tool with each from a terminal. Both can sign in, but you will give only `mcp-reader` the role needed to run the tool.
+
+<ArticleCallout variant="important" title="Important">
+  <p>Red Hat lists MCP Gateway as a <a href="https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/mcp_gateway/mcp-gateway-introduction">Technology Preview feature</a>. Use this lab in a learning environment.</p>
+</ArticleCallout>
+
+## What you will learn
+
+- The difference between authentication (who is calling) and authorization (what they may do).
+- How a Keycloak JSON Web Token (JWT) carries a user's identity and roles to the gateway.
+- How the gateway checks tool roles to decide whether a user may run an MCP tool.
+- Why a user's gateway permissions are separate from the backend's OpenShift role-based access control (RBAC) permissions.
+
+## Before you begin
+
+Use a gateway with no active clients or shared user traffic. You will change its access rules so that clients need a Keycloak token to use `/mcp`.
+
+## What you will test
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Lab capabilities and benefits">
+
+| Capability | Visible proof | Practical value |
+| --- | --- | --- |
+| Authentication | Missing or invalid token receives HTTP 401 | The gateway rejects callers whose identity it cannot verify. |
+| Tool authorization | Reader succeeds; gateway denies the no-tools user | You set tool permissions at the gateway before the backend handles the call. |
+| Separate backend identity | OpenShift MCP server reads Pods as `mcp-viewer` | Gateway roles and Kubernetes RBAC remain independent controls. |
+
+</div>
+
+You will control who can run the tool. Both users can still see it in `tools/list`. Production login and restrictions on direct backend access are outside this lab.
+
+## Architecture at a glance
+
+### Understand the two identities
+
+Think of a secure office:
+
+- **Keycloak is the badge office.** You sign in to get a signed access token, the JWT.
+- **Authentication is the front-door guard.** It checks whether the badge is genuine.
+- **Authorization is the room guard.** It checks whether your badge grants access to the requested MCP tool.
+
+The backend has a separate identity for OpenShift: its `mcp-viewer` **ServiceAccount**, an account for a workload. You use OpenShift RBAC to set what that account may read or change.
+
+A **listener** is a named entry point on the Gateway. You will attach an **AuthPolicy**, a set of access rules, to each listener. **Authorino** is the Connectivity Link component that evaluates those rules.
+
+<McpGatewayAuthFlow />
+
+Read the flow in order:
+
+1. You sign in to Keycloak and receive a signed JWT. The reader's JWT contains the tool role; the no-tools user's JWT does not.
+2. The client sends that token with an MCP request to the `mcp` listener.
+3. At `mcp`, Authorino validates the token using the first `AuthPolicy`. The gateway returns HTTP 401 for a missing, expired, or invalid token.
+4. The MCP router reads the tool call and identifies the backend registration and unprefixed tool name.
+5. At `mcps`, Authorino checks those values against the JWT roles using the second `AuthPolicy`. The gateway denies the call if the user lacks the tool role.
+6. The OpenShift MCP server uses `ServiceAccount/mcp-viewer` for its OpenShift API request.
+7. The OpenShift API checks that ServiceAccount's RBAC permissions before returning data.
+
+## Know what belongs to the lab
+
+<div className="article-table article-table--wrap" tabIndex={0} role="region" aria-label="Lab resource ownership">
+
+| Namespace | Resource | Change in this lab |
+| --- | --- | --- |
+| `openshift-ingress` | `Gateway/mcp-gateway` | Add two `AuthPolicy` objects, then remove them. |
+| Connectivity Link namespace | `Kuadrant/kuadrant` | Create it only if missing; keep it after the lab because it is shared infrastructure. |
+| Gateway runtime namespace | <code>MCPGatewayExtension/<wbr />mcp-gateway-extension</code> | Add OAuth discovery metadata, then remove it. |
+| `mcp-exp` | Backend, route, registration, and <code>ServiceAccount/<wbr />mcp-viewer</code> | No new resource. |
+| `keycloak` | Existing Keycloak instance | Add realm `mcp-auth-lab`, then delete that realm. |
+
+</div>
+
+The gateway and Connectivity Link controllers generate runtime configuration from these resources. Do not edit generated Deployments, Secrets, Envoy filters, or proxy configuration.
+
+## 0. Download the lab files and run preflight checks
+
+### Prepare two terminals
+
+Use **terminal 1 for the tunnel** and **terminal 2 for all other commands**. Keep terminal 2 open throughout the lab: later steps reuse its addresses and short-lived tokens.
+
+In terminal 2, create a working folder:
+
+```bash
+mkdir -p ~/mcp-gateway-auth-lab
+cd ~/mcp-gateway-auth-lab
+```
+
+Download these four files into that folder. Keep the filenames shown here:
+
+- <a href={withBase('/labs/mcp-gateway-auth/00-kuadrant.yaml')} download>00-kuadrant.yaml: start the shared policy runtime</a>
+- <a href={withBase('/labs/mcp-gateway-auth/01-authentication.yaml.tmpl')} download>01-authentication.yaml.tmpl: check identity at mcp</a>
+- <a href={withBase('/labs/mcp-gateway-auth/02-authorization.yaml.tmpl')} download>02-authorization.yaml.tmpl: check the tool role at mcps</a>
+- <a href={withBase('/labs/mcp-gateway-auth/mcp_auth_check.py')} download>mcp_auth_check.py: send a Pod-list request through the gateway</a>
+
+If your browser saves them in Downloads, move these four files into the working folder. Confirm they are present:
+
+```bash
+ls 00-kuadrant.yaml 01-authentication.yaml.tmpl \
+  02-authorization.yaml.tmpl mcp_auth_check.py
+```
+
+The `.tmpl` files contain address placeholders that you will replace before applying them. The Python helper uses the standard library and sends MCP session setup, `tools/list`, and one `tools/call`. You will request and inspect the JWT yourself before giving it to the helper.
+
+### Check prerequisites and starting resources
+
+This lab needs a working gateway, a registered backend, a ready Keycloak instance, and the Connectivity Link Operator. The checks below confirm the resources from your basic setup.
+
+```bash
+oc whoami
+oc whoami --show-server
+oc get keycloak keycloak -n keycloak
+
+oc wait gateway/mcp-gateway -n openshift-ingress \
+  --for=condition=Programmed --timeout=2m
+
+oc get gateway mcp-gateway -n openshift-ingress \
+  -o jsonpath='{range .spec.listeners[*]}{.name}{" -> "}{.hostname}{"\n"}{end}'
+
+oc wait mcpgatewayextension/mcp-gateway-extension -n mcp-gateway \
+  --for=condition=Ready --timeout=2m
+
+oc wait mcpserverregistration/mcp-server-test -n mcp-exp \
+  --for=condition=Ready --timeout=2m
+```
+
+Expected: `oc whoami` shows your account, Keycloak exists, and the wait commands succeed. `--timeout=2m` lets each wait run for up to two minutes; it returns as soon as the condition matches. The listeners must match this setup:
+
+```text
+mcp -> mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local
+mcps -> *.mcp.local
+```
+
+This article uses the existing runtime namespace `mcp-gateway`. If these names or hostnames differ, check the basic setup before applying the supplied files.
+
+Check the installed versions:
+
+```bash
+oc get clusterversion version -o jsonpath='{.status.desired.version}{"\n"}'
+oc get csv -A -o json \
+  | jq -r '.items[].metadata.name' \
+  | sort -u \
+  | grep -E 'rhcl-operator|mcp-gateway|rhbk-operator'
+```
+
+A pipe (`|`) passes output to the next command. Here, `jq` reads the JSON, `sort -u` removes repeated Operator names, and `grep` selects the relevant products. Tested versions are a reference point, not a guarantee for every combination.
+
+### Confirm the gateway starts without security policies
+
+```bash
+oc get authpolicy -A \
+  -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name,KIND:.spec.targetRef.kind,TARGET:.spec.targetRef.name,LISTENER:.spec.targetRef.sectionName'
+
+oc get mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  -o custom-columns='NAME:.metadata.name,OAUTH:.spec.oauthProtectedResource'
+```
+
+Expected: no existing `AuthPolicy` protects this gateway or its routes, and `OAUTH` is empty or `<none>`.
+
+During cleanup, you will remove the two lab policies and clear the OAuth metadata you add. Existing settings may belong to another exercise or client. Use a fresh learning gateway, or restore your previous exercise before starting this one.
+
+### Prove the unprotected gateway works
+
+Run one request before adding security. You can compare it with the requests the gateway rejects after you add the policies.
+
+In **terminal 1**, start the tunnel and leave it running:
+
+```bash
+oc port-forward -n openshift-ingress \
+  service/mcp-gateway-openshift-default 18080:8080
+```
+
+Expected: `Forwarding from 127.0.0.1:18080 -> 8080`. This lets terminal 2 reach the internal Gateway Service through your authenticated OpenShift connection.
+
+In **terminal 2**, run:
+
+```bash
+python3 mcp_auth_check.py
+```
+
+Expected: initialization succeeds, the catalog includes `openshift_pods_list_in_namespace`, and the tool returns Pod data.
+
+If this fails, check the tunnel, route, registration, and backend before continuing. Fix the starting setup so you can tell whether the policies cause a later failure.
+
+## 1. Create the Keycloak users and tool role
+
+Create two users who can sign in. Give the Pod-list role to `mcp-reader` and leave `mcp-no-tools` without it.
+
+### 1.1 Find Keycloak and sign in as its administrator
+
+Discover the URL in terminal 2:
+
+```bash
+export KEYCLOAK_HOST="$(oc get route keycloak -n keycloak \
+  -o jsonpath='{.spec.host}')"
+printf 'Open: https://%s\n' "${KEYCLOAK_HOST}"
+```
+
+`$(...)` substitutes the command's output into the assignment. `export` makes the resulting variable available to programs you run from this terminal.
+
+The Keycloak Operator stores the initial administrator credentials in a Secret named `<Keycloak-name>-initial-admin`. Check whether you may read it:
+
+```bash
+oc auth can-i get secret/keycloak-initial-admin -n keycloak
+oc get secret keycloak-initial-admin -n keycloak
+```
+
+Continue only if the first command says `yes` and the Secret exists. In a private terminal, decode the credentials:
+
+```bash
+oc extract secret/keycloak-initial-admin -n keycloak \
+  --keys=username --to=-
+
+oc extract secret/keycloak-initial-admin -n keycloak \
+  --keys=password --to=-
+```
+
+Open the URL printed earlier, choose **Administration Console**, and sign in. The bootstrap administrator belongs to the `master` realm.
+
+Do not paste the administrator password into chat, YAML, screenshots, or Git. If the Secret is absent or you cannot read it, ask the cluster owner for an administrator account. Creating a replacement Secret does not reset an initialized administrator.
+
+### 1.2 Create the lab realm
+
+A **realm** keeps a set of users, applications, and permissions together, separate from other realms.
+
+1. Click **Manage realms** in the left menu.
+2. Click **Create realm**.
+3. Leave **Resource file** empty. Enter `mcp-auth-lab` in **Realm name**, leave **Enabled** on, and click **Create**.
+4. Confirm `mcp-auth-lab` appears beside **Current realm** in the left panel.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/01-create-realm.webp"
+  width={2000} height={1065}
+  alt="Keycloak Create realm dialog opened from Manage realms, with mcp-auth-lab entered and Enabled on."
+  caption="Create the lab realm from Manage realms. You do not need to upload a file."
+/>
+
+Use this dedicated realm throughout the article. If it exists from your own unfinished run, continue there and check each setting below. Do not replace a realm belonging to someone else.
+
+Expect an empty **Users** page. You signed in with an administrator from `master`; you have not created users in this realm yet.
+
+### 1.3 Create the login client
+
+A **client** is an application's registration in Keycloak. You will use `mcp-gateway` when requesting a user's JWT from the terminal; this does not create a new Gateway in OpenShift.
+
+1. Open **Clients > Create client**.
+2. Select **OpenID Connect**.
+3. Enter Client ID `mcp-gateway`.
+4. Click **Next** to open **Capability config**.
+5. Turn **Client authentication** on and leave **Authorization** off.
+6. Under **Authentication flow**, select **Direct access grants**.
+7. Clear **Standard flow** and leave the other flow checkboxes clear.
+8. Continue to **Login settings**, leave its URLs empty for this terminal exercise, and click **Save**.
+9. Open **Credentials**. Keep this page available; you will copy the secret into a hidden terminal prompt later.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/02-client-capabilities.webp"
+  width={2000} height={982}
+  alt="Keycloak client settings with Client authentication on, Authorization off, and only Direct access grants selected."
+  caption="The terminal token request needs Client authentication and Direct access grants."
+/>
+
+You authenticate the application with its **client secret** and the user with their **password**. **Direct access grants** lets you send both from the terminal to request an access token. Use the gateway's `AuthPolicy` for tool permissions; leave the Keycloak client's **Authorization** switch off.
+
+Use Direct Access Grants for this disposable lab. For real users, use an organization-approved browser login flow.
+
+### 1.4 Create the permission client
+
+This second client holds roles for one registered MCP server. Verify the exact registration name:
+
+```bash
+oc get mcpserverregistration mcp-server-test -n mcp-exp \
+  -o jsonpath='{.metadata.namespace}{"/"}{.metadata.name}{"\n"}'
+```
+
+Expected: `mcp-exp/mcp-server-test`.
+
+In the `mcp-auth-lab` realm:
+
+1. Open **Clients > Create client** and select **OpenID Connect**.
+2. Enter Client ID `mcp-exp/mcp-server-test` exactly.
+3. Turn **Client authentication**, **Standard flow**, and **Direct access grants** off.
+4. Save.
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Keycloak client purposes">
+
+| Client | Job |
+| --- | --- |
+| `mcp-gateway` | Requests a user's JWT. |
+| `mcp-exp/mcp-server-test` | Holds roles for that exact namespaced MCP registration. |
+
+</div>
+
+The internal policy uses the registration name to find the matching section of the JWT.
+
+### 1.5 Create the tool role
+
+1. Open **Clients**.
+2. Select `mcp-exp/mcp-server-test`, then open the **Roles** tab.
+3. Click **Create role**.
+4. Enter `tool:pods_list_in_namespace` as the role name, then click **Save**.
+
+Use `tool:` followed by the backend tool name, `pods_list_in_namespace`. Leave out the `openshift_` prefix shown in the client's tool list.
+
+### 1.6 Create both users and set their passwords
+
+Open **Users > Create new user** and create the users with these values:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Lab user profiles">
+
+| Field | Reader | User without the tool role |
+| --- | --- | --- |
+| Username | `mcp-reader` | `mcp-no-tools` |
+| First name | `MCP` | `MCP` |
+| Last name | `Reader` | `No Tools` |
+| Email | `mcp-reader@example.invalid` | `mcp-no-tools@example.invalid` |
+
+</div>
+
+For each user:
+
+1. Leave **Required user actions** empty and click **Create**. On the user's details page, confirm **Enabled** is on.
+2. Open **Credentials > Set password**.
+3. Choose a lab-only password. Use different passwords for the two users.
+4. Turn **Temporary** off, then save and confirm.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/04-create-reader.webp"
+  width={2000} height={1489}
+  alt="Create user form with the mcp-reader username, example email address, first name MCP, and last name Reader."
+  caption="Fill the profile fields for mcp-reader, then repeat for mcp-no-tools."
+/>
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/05-password-redacted.webp"
+  width={2000} height={882}
+  alt="Set password dialog with both password values covered and Temporary set to Off."
+  caption="Set your own lab-only password and turn Temporary off. The screenshot's password values are hidden."
+/>
+
+With **Temporary off**, you can sign in without a password-change prompt. Fill the profile fields above to avoid `Account is not fully set up` errors. Use the `.invalid` addresses for these test users instead of real email addresses.
+
+If continuing your own earlier run, open the existing clients, role, and users and confirm these settings instead of creating duplicates.
+
+### 1.7 Give the role only to mcp-reader
+
+1. Open **Users**, search for `mcp-reader`, and select it.
+2. Open the **Role mapping** tab.
+3. Open the **Assign role** menu and choose **Client roles**.
+4. Search for `tool:pods_list_in_namespace`.
+5. Select the row whose client is `mcp-exp/mcp-server-test`.
+6. Click **Assign**.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/06-client-roles-menu.webp"
+  width={2000} height={625}
+  alt="The Assign role menu on mcp-reader's Role mapping tab shows Client roles and Realm roles."
+  caption="Choose Client roles because the tool role belongs to the permission client."
+/>
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/07-assign-tool-role.webp"
+  width={2000} height={843}
+  alt="Assign Client roles dialog with tool:pods_list_in_namespace selected for client mcp-exp/mcp-server-test."
+  caption="Check both the role name and Client ID before clicking Assign."
+/>
+
+Leave `mcp-no-tools` without this role. Creating a role under the client and assigning that role to a user are separate actions.
+
+### 1.8 Allow the login client to include that role
+
+The reader now has the role. Next, allow the login client to include it in the reader's token.
+
+1. Open **Clients > mcp-gateway > Client scopes**.
+2. Open **mcp-gateway-dedicated**.
+3. Open its **Scope** tab.
+4. Turn **Full scope allowed** on.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/08-full-scope.webp"
+  width={1774} height={650}
+  alt="The Scope tab of mcp-gateway-dedicated shows Full scope allowed set to On."
+  caption="Full scope allowed lets the token include roles already assigned to the user."
+/>
+
+With this setting on, you can include the user's assigned roles in the token. You still need to assign the role in 1.7. In production, restrict each client's role scope to what its application needs.
+
+### 1.9 Request and inspect the reader JWT
+
+In terminal 2, set and verify the realm address:
+
+```bash
+export KEYCLOAK_ISSUER="https://${KEYCLOAK_HOST}/realms/mcp-auth-lab"
+
+curl -fsS "${KEYCLOAK_ISSUER}/.well-known/openid-configuration" \
+  | jq '{issuer, token_endpoint}'
+```
+
+The **issuer** is the address of your Keycloak realm. The **token endpoint** is the URL that accepts your token request. Check that `issuer` exactly matches `KEYCLOAK_ISSUER` and `token_endpoint` is that address followed by `/protocol/openid-connect/token` before sending credentials.
+
+Open **Clients > mcp-gateway > Credentials** in Keycloak. Use the copy icon beside **Client Secret**; do not click **Regenerate**.
+
+<ArticleImage
+  src="/images/mcp-gateway-auth/03-client-credentials.webp"
+  width={2000} height={1019}
+  alt="The mcp-gateway Credentials tab shows a masked Client Secret with a copy icon beside it."
+  caption="Copy the current Client Secret using the copy icon, not Regenerate."
+/>
+
+Run this command in terminal 2, paste the secret, and press <kbd>Enter</kbd>. The terminal hides your input.
+
+```bash
+IFS= read -rs KEYCLOAK_CLIENT_SECRET
+```
+
+Next, run this command, enter the `mcp-reader` password, and press <kbd>Enter</kbd>:
+
+```bash
+IFS= read -rs MCP_READER_PASSWORD
+```
+
+Confirm both values were entered without displaying them:
+
+```bash
+test -n "${KEYCLOAK_CLIENT_SECRET}" && echo 'Client secret entered'
+test -n "${MCP_READER_PASSWORD}" && echo 'Reader password entered'
+```
+
+Run one input command at a time and enter its value before continuing. Check for both confirmation messages. `read -rs` keeps the value hidden and preserves backslashes. Use this form in Bash or zsh; `read -p` has a different meaning in zsh.
+
+Request a token:
+
+```bash
+TOKEN_RESPONSE="$(curl -sS \
+  "${KEYCLOAK_ISSUER}/protocol/openid-connect/token" \
+  --data-urlencode 'grant_type=password' \
+  --data-urlencode 'client_id=mcp-gateway' \
+  --data-urlencode "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
+  --data-urlencode 'username=mcp-reader' \
+  --data-urlencode "password=${MCP_READER_PASSWORD}" \
+  --data-urlencode 'scope=openid profile')"
+
+printf '%s\n' "${TOKEN_RESPONSE}" \
+  | jq 'if .access_token
+        then {token_received:true,token_type,expires_in,scope}
+        else {error,error_description}
+        end'
+```
+
+`--data-urlencode` encodes each form value. We omit `curl -f` here so Keycloak's useful JSON error remains visible. The filtered output does not print the token.
+
+Expected: `token_received` is `true`. `expires_in` reports the access token's lifetime in seconds; it depends on your Keycloak settings. Resolve any error before continuing:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Token request troubleshooting">
+
+| Response | Check in Keycloak |
+| --- | --- |
+| `invalid_client`, or `unauthorized_client` with invalid client credentials | Select `mcp-auth-lab`; check client ID `mcp-gateway`, Client authentication On, and the current secret on Credentials. |
+| Client not allowed to use Direct Access Grants | Turn Direct access grants on and save. |
+| `invalid_grant: Invalid user credentials` | Check username, password, enabled state, and selected realm. |
+| `invalid_grant: Account is not fully set up` | Fill first name, last name, and email; turn Temporary off; resolve remaining required actions. |
+
+</div>
+
+If you entered the wrong client secret, repeat the hidden prompts and token request. Use the existing secret on the Credentials page.
+
+Store the token in memory and clear the temporary credentials:
+
+```bash
+export MCP_READER_TOKEN="$(printf '%s' "${TOKEN_RESPONSE}" \
+  | jq -r '.access_token // empty')"
+unset TOKEN_RESPONSE KEYCLOAK_CLIENT_SECRET MCP_READER_PASSWORD
+
+test -n "${MCP_READER_TOKEN}" && echo 'Reader token received'
+```
+
+A JWT contains named values called **claims**. Inspect the issuer, username, and roles:
+
+```bash
+python3 -c 'import os,base64,json
+p=os.environ["MCP_READER_TOKEN"].split(".")[1]
+p += "=" * (-len(p) % 4)
+d=json.loads(base64.urlsafe_b64decode(p))
+print(json.dumps({"iss":d.get("iss"),"preferred_username":d.get("preferred_username"),"resource_access":d.get("resource_access",{})},indent=2))'
+```
+
+You have decoded the JWT payload without checking its signature. Authorino checks the signature when you call the protected gateway.
+
+**Checkpoint:** the issuer ends in `/realms/mcp-auth-lab`, the username is `mcp-reader`, and `resource_access["mcp-exp/mcp-server-test"].roles` contains `tool:pods_list_in_namespace`. If the role is missing, recheck 1.7 and 1.8 and request a new token. An already-issued JWT does not change when you assign a role.
+
+## 2. Protect the gateway front door
+
+Keep OAuth discovery public while requiring a valid Keycloak JWT for `/mcp`.
+
+### 2.1 Create the Kuadrant policy runtime
+
+You installed the Connectivity Link Operator in the basic setup. Create a `Kuadrant` resource to start its policy components, including Authorino. If you have a working Kuadrant installation, reuse it and skip the creation commands below.
+
+For a learning cluster without a Kuadrant instance, `00-kuadrant.yaml` contains:
+
+```yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kuadrant-system
+---
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: kuadrant-system
+```
+
+Apply it and wait:
+
+```bash
+oc apply -f 00-kuadrant.yaml
+oc wait kuadrant/kuadrant -n kuadrant-system \
+  --for=condition=Ready --timeout=5m
+oc get pods -A | grep -iE 'authorino|limitador'
+```
+
+Expected: `Kuadrant/kuadrant` becomes ready and runtime Pods appear. The wait allows up to five minutes. Keep this shared runtime after the lab.
+
+### 2.2 Set the non-secret addresses
+
+Run in terminal 2:
+
+```bash
+export KEYCLOAK_HOST="$(oc get route keycloak -n keycloak \
+  -o jsonpath='{.spec.host}')"
+export KEYCLOAK_ISSUER="https://${KEYCLOAK_HOST}/realms/mcp-auth-lab"
+export MCP_GATEWAY_HOST='mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local'
+export MCP_GATEWAY_BASE="http://${MCP_GATEWAY_HOST}:8080"
+export MCP_RESOURCE="${MCP_GATEWAY_BASE}/mcp"
+export MCP_METADATA_URL="${MCP_GATEWAY_BASE}/.well-known/oauth-protected-resource"
+
+printf 'Keycloak issuer: %s\nProtected MCP URL: %s\n' \
+  "${KEYCLOAK_ISSUER}" "${MCP_RESOURCE}"
+```
+
+These are addresses, not credentials. The hostname matches the gateway's `mcp` listener. The tunnel uses `127.0.0.1`, but the HTTP `Host` header must still identify that listener.
+
+### 2.3 Publish the OAuth discovery document
+
+You publish a small JSON document so clients can find the Keycloak realm that issues tokens for this gateway. This is **OAuth discovery**. You will add the authentication check in 2.4.
+
+Confirm the extension's field exists, then set it:
+
+```bash
+oc explain mcpgatewayextension.spec.oauthProtectedResource
+
+export OAUTH_METADATA_PATCH="$(jq -nc \
+  --arg resource "${MCP_RESOURCE}" \
+  --arg issuer "${KEYCLOAK_ISSUER}" \
+  '{spec:{oauthProtectedResource:{
+    resourceName:"MCP Gateway",
+    resource:$resource,
+    authorizationServers:[$issuer],
+    bearerMethodsSupported:["header"],
+    scopesSupported:["openid","profile","roles"]
+  }}}')"
+
+oc patch mcpgatewayextension mcp-gateway-extension \
+  -n mcp-gateway --type=merge -p "${OAUTH_METADATA_PATCH}"
+oc rollout status deployment/mcp-gateway -n mcp-gateway --timeout=2m
+
+oc get mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  -o jsonpath='{.spec.oauthProtectedResource}' | jq .
+```
+
+<div className="article-table" tabIndex={0} role="region" aria-label="OAuth discovery fields">
+
+| Field | Meaning |
+| --- | --- |
+| `resource` | The MCP URL you want to protect. |
+| `authorizationServers` | The Keycloak realm that issues tokens. |
+| `bearerMethodsSupported: ["header"]` | Send the JWT in `Authorization: Bearer ...`. |
+| `scopesSupported` | Named sets of information or access that clients can request, such as `profile`. |
+
+</div>
+
+Use the extension to configure these values. Its controller manages the broker/router Deployment and can overwrite edits you make to the Deployment's environment variables. See the [v0.7.1 authentication guide](https://github.com/Kuadrant/mcp-gateway/blob/v0.7.1/docs/guides/authentication.md).
+
+### 2.4 Apply the front-door authentication policy
+
+Open `01-authentication.yaml.tmpl` in your editor. Its `targetRef` selects `Gateway/mcp-gateway`, and `sectionName: mcp` selects the client-facing listener.
+
+Replace the address placeholders and check the result:
+
+```bash
+sed \
+  -e "s|__KEYCLOAK_ISSUER__|${KEYCLOAK_ISSUER}|g" \
+  -e "s|__MCP_METADATA_URL__|${MCP_METADATA_URL}|g" \
+  01-authentication.yaml.tmpl > 01-authentication.yaml
+
+grep '__[A-Z_]*__' 01-authentication.yaml \
+  && echo 'STOP: placeholder remains' \
+  || echo 'Authentication YAML is ready'
+```
+
+Continue only when it prints `Authentication YAML is ready`. First validate the file:
+
+```bash
+oc apply --dry-run=server -f 01-authentication.yaml
+```
+
+If the dry run succeeds, apply it:
+
+```bash
+oc apply -f 01-authentication.yaml
+oc wait authpolicy/mcp-lab-authentication -n openshift-ingress \
+  --for=condition=Enforced --timeout=2m
+```
+
+`sed` replaces each placeholder with your non-secret address. `--dry-run=server` checks the manifest without saving it; the following `apply` saves it.
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Authentication policy fields">
+
+| Field | Job |
+| --- | --- |
+| `defaults.when` | Leaves `/.well-known` discovery accessible. |
+| `authentication.keycloak.jwt.issuerUrl` | Tells Authorino which JWT issuer and signing keys to trust. |
+| `unauthenticated.code: 401` | Rejects a request without a valid identity. |
+| `WWW-Authenticate` | Points the rejected client to the discovery document. |
+
+</div>
+
+If the wait times out:
+
+```bash
+oc get authpolicy mcp-lab-authentication -n openshift-ingress \
+  -o jsonpath='{range .status.conditions[*]}{.type}={.status} reason={.reason} msg={.message}{"\n"}{end}'
+```
+
+With `Accepted=True`, the controller has accepted your policy configuration. Check for `Enforced=True` before testing. If you see `Enforced=False`, `MissingResource`, and “kuadrant is not installed,” complete 2.1.
+
+### 2.5 Test public discovery and rejected requests
+
+With the tunnel running, read the public metadata in terminal 2:
+
+```bash
+curl -fsS \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  http://127.0.0.1:18080/.well-known/oauth-protected-resource \
+  | jq '{resource, authorization_servers, bearer_methods_supported}'
+```
+
+Expected: JSON naming your MCP resource and the `/realms/mcp-auth-lab` issuer.
+
+Send one request without a token and one with an invalid token:
+
+```bash
+curl -si \
+  -H "Host: ${MCP_GATEWAY_HOST}" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  http://127.0.0.1:18080/mcp \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}'
+
+python3 mcp_auth_check.py --invalid-token --expect-http 401
+```
+
+Expected: the first response has HTTP 401 and `WWW-Authenticate`; the invalid-token test returns 401. Both results confirm that the gateway rejects a request without a valid identity.
+
+If you receive HTTP 200 after applying the policy, wait about 10 seconds and repeat the tests. The proxy may need time to apply the change. Continue when both requests return 401; otherwise, inspect the policy conditions from 2.4.
+
+**Checkpoint:** discovery is public, the policy is enforced, and missing or invalid tokens cannot enter `/mcp`.
+
+## 3. Allow one tool and check the backend's permissions
+
+The gateway checks whether the user may call the tool. The backend then uses its own OpenShift permissions to read the Pods.
+
+### 3.1 Apply the internal tool-authorization policy
+
+Open `02-authorization.yaml.tmpl`. It attaches to `mcps`, the listener the router uses for registered backend servers.
+
+```bash
+sed "s|__KEYCLOAK_ISSUER__|${KEYCLOAK_ISSUER}|g" \
+  02-authorization.yaml.tmpl > 02-authorization.yaml
+
+grep '__[A-Z_]*__' 02-authorization.yaml \
+  && echo 'STOP: placeholder remains' \
+  || echo 'Authorization YAML is ready'
+```
+
+Continue only when it prints `Authorization YAML is ready`. Validate before applying:
+
+```bash
+oc apply --dry-run=server -f 02-authorization.yaml
+```
+
+If the dry run succeeds:
+
+```bash
+oc apply -f 02-authorization.yaml
+oc wait authpolicy/mcp-lab-authorization -n openshift-ingress \
+  --for=condition=Enforced --timeout=2m
+```
+
+At this listener, Authorino validates the JWT and checks the tool role if the router supplies a tool-name header.
+
+For this call, the router supplies:
+
+```text
+x-mcp-servername: mcp-exp/mcp-server-test
+x-mcp-toolname: pods_list_in_namespace
+```
+
+Read the permission check in four steps:
+
+1. Read `pods_list_in_namespace`.
+2. Add `tool:` to form `tool:pods_list_in_namespace`.
+3. Open the JWT's `resource_access["mcp-exp/mcp-server-test"]` section.
+4. Allow the call only if its `roles` list contains that role.
+
+The router adds these headers; you do not need to type them. The policy uses HTTP 401 for an invalid identity and HTTP 403 for a valid identity without permission. In 4.3, you will check the logs if the gateway wraps the denial in an HTTP 500 response.
+
+### 3.2 Check which identity the backend uses
+
+There are two identities in this lab: the **user's Keycloak token** for the gateway, and the **backend's `mcp-viewer` ServiceAccount** for OpenShift.
+
+Check how the backend chooses its OpenShift credentials:
+
+```bash
+oc get configmap openshift-mcp-server-config -n mcp-exp \
+  -o jsonpath='{.data.config\.toml}' \
+  | grep -E 'read_only|cluster_auth_mode'
+```
+
+Expected:
+
+```toml
+read_only = true
+cluster_auth_mode = "kubeconfig"
+```
+
+**If you see `kubeconfig`, leave the configuration as it is and continue to 3.3.** The backend uses its configured OpenShift credentials. In this deployment, those credentials belong to `mcp-viewer`. You do not need a header-removal filter. See the [OpenShift MCP server credential-selection code](https://github.com/openshift/openshift-mcp-server/blob/c5d3fa30bef36ba8b0c9001ea4b2349227a2b41d/pkg/kubernetes/manager.go).
+
+<details>
+<summary>Only if your mode is passthrough: remove the Keycloak token before the backend</summary>
+
+In `passthrough` mode, the backend uses an incoming bearer token for OpenShift API calls. Our Keycloak token is for the gateway, not for OpenShift. For this lab, remove it from the request before the backend receives it, so the backend can use `mcp-viewer` instead.
+
+This applies only to this trusted in-cluster backend, with its own ServiceAccount credentials and `require_oauth` disabled. Do not use it for a server that requires an incoming token.
+
+First, save the route before changing it. Keep the backup until cleanup; do not reuse a backup from an older, completed exercise.
+
+```bash
+if test -f backend-route-restore.json; then
+  echo 'Keeping the existing route backup for this lab run.'
+else
+  oc get httproute mcp-server-test-route -n mcp-exp -o json \
+    | jq '[{op:"replace",path:"/spec",value:.spec}]' \
+    > backend-route-restore.json
+fi
+
+jq -e '.[0].value.rules | length > 0' backend-route-restore.json
+```
+
+Expected: `true`. Download <a href={withBase('/labs/mcp-gateway-auth/03-backend-identity-handoff.yaml')} download>03-backend-identity-handoff.yaml</a> into your working folder. Use it to add an `Authorization`-removal filter to this lab's backend route. The gateway checks the token before forwarding the request to the backend.
+
+Validate the file:
+
+```bash
+oc apply --dry-run=server -f 03-backend-identity-handoff.yaml
+```
+
+If validation succeeds, apply it and check the route:
+
+```bash
+oc apply -f 03-backend-identity-handoff.yaml
+
+oc get httproute mcp-server-test-route -n mcp-exp \
+  -o jsonpath='{.spec.rules[0].filters}' | jq .
+
+oc get httproute mcp-server-test-route -n mcp-exp \
+  -o jsonpath='{range .status.parents[*].conditions[*]}{.type}={.status}{"\n"}{end}'
+```
+
+Expected: the filter removes `Authorization`, and the route reports `Accepted=True` and `ResolvedRefs=True`. You can now continue to 3.3.
+
+</details>
+
+### 3.3 Verify the ServiceAccount and both policies
+
+```bash
+oc get deployment mcp-server-test -n mcp-exp \
+  -o jsonpath='{.spec.template.spec.serviceAccountName}{"\n"}'
+
+oc auth can-i list pods -n mcp-exp \
+  --as=system:serviceaccount:mcp-exp:mcp-viewer
+
+oc auth can-i delete pods -n mcp-exp \
+  --as=system:serviceaccount:mcp-exp:mcp-viewer
+
+oc get authpolicy mcp-lab-authentication mcp-lab-authorization \
+  -n openshift-ingress \
+  -o custom-columns='NAME:.metadata.name,LISTENER:.spec.targetRef.sectionName,ENFORCED:.status.conditions[?(@.type=="Enforced")].status'
+```
+
+Expected: `mcp-viewer`, then `yes` for listing and `no` for deletion. Both policies show `ENFORCED=True`, one on `mcp` and one on `mcps`.
+
+You assign the tool role in Keycloak and enforce it with the gateway policy. You use OpenShift RBAC to control the backend's access to Kubernetes data.
+
+## 4. Test the allowed and denied users
+
+Both users must obtain valid tokens. The difference is the tool role.
+
+### 4.1 Request a fresh reader token and call the tool
+
+Request a fresh token by repeating the credential inputs and token request in [1.9](#19-request-and-inspect-the-reader-jwt). Run this test before its `expires_in` time elapses:
+
+```bash
+python3 mcp_auth_check.py --token-env MCP_READER_TOKEN
+oc get pods -n mcp-exp
+```
+
+`--token-env` tells the helper which environment variable contains the JWT. It sends the token in the Authorization header and starts a new MCP session.
+
+Expected: the helper lists tools, calls `openshift_pods_list_in_namespace`, and returns Pod data that agrees with `oc get pods`. The request follows this path:
+
+```text
+reader JWT → identity accepted → tool role matched
+  → backend uses mcp-viewer → OpenShift Pod data
+```
+
+### 4.2 Request the no-tools user's token
+
+The previous request cleared the client secret. Run this command, paste the current `mcp-gateway` client secret, and press <kbd>Enter</kbd>:
+
+```bash
+IFS= read -rs KEYCLOAK_CLIENT_SECRET
+```
+
+Next, run this command, enter the `mcp-no-tools` password, and press <kbd>Enter</kbd>. Input remains hidden in both commands.
+
+```bash
+IFS= read -rs MCP_NO_TOOLS_PASSWORD
+```
+
+Confirm the values are present:
+
+```bash
+test -n "${KEYCLOAK_CLIENT_SECRET}" && echo 'Client secret entered'
+test -n "${MCP_NO_TOOLS_PASSWORD}" && echo 'No-tools password entered'
+```
+
+After both confirmation messages appear:
+
+```bash
+NO_TOOLS_RESPONSE="$(curl -sS \
+  "${KEYCLOAK_ISSUER}/protocol/openid-connect/token" \
+  --data-urlencode 'grant_type=password' \
+  --data-urlencode 'client_id=mcp-gateway' \
+  --data-urlencode "client_secret=${KEYCLOAK_CLIENT_SECRET}" \
+  --data-urlencode 'username=mcp-no-tools' \
+  --data-urlencode "password=${MCP_NO_TOOLS_PASSWORD}" \
+  --data-urlencode 'scope=openid profile')"
+
+printf '%s\n' "${NO_TOOLS_RESPONSE}" \
+  | jq 'if .access_token
+        then {token_received:true,token_type,expires_in,scope}
+        else {error,error_description}
+        end'
+
+export MCP_NO_TOOLS_TOKEN="$(printf '%s' "${NO_TOOLS_RESPONSE}" \
+  | jq -r '.access_token // empty')"
+unset NO_TOOLS_RESPONSE KEYCLOAK_CLIENT_SECRET MCP_NO_TOOLS_PASSWORD
+
+test -n "${MCP_NO_TOOLS_TOKEN}" && echo 'No-tools token received'
+```
+
+Expected: `token_received: true`. You can sign in as `mcp-no-tools` without the tool role.
+
+### 4.3 Run the denied test and confirm the decision
+
+```bash
+export MCP_DENIAL_SINCE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+python3 mcp_auth_check.py --token-env MCP_NO_TOOLS_TOKEN --expect-denied
+```
+
+Expected: the gateway denies the Pod-list call. You may still see the tool in the catalog because this policy controls execution.
+
+In the saved MCP Gateway 0.7.1 test, the client received HTTP 500 while Authorino recorded the underlying HTTP 403 denial. If you see this response, the helper prints `CHECK`. Confirm the policy decision in the logs before counting the test as passed.
+
+Discover where Authorino runs:
+
+```bash
+oc get deployment -A \
+  -o custom-columns='NAMESPACE:.metadata.namespace,NAME:.metadata.name' \
+  | grep -w authorino
+
+export AUTHORINO_NS="$(oc get deployment -A -o json \
+  | jq -r '.items[] | select(.metadata.name=="authorino") | .metadata.namespace')"
+printf 'Authorino namespace: %s\n' "${AUTHORINO_NS}"
+```
+
+Expect one `authorino` Deployment. If there is more than one, use the namespace of the instance serving this gateway.
+
+Read the logs after the denied test:
+
+```bash
+oc logs -n "${AUTHORINO_NS}" deployment/authorino --since-time="${MCP_DENIAL_SINCE}" \
+  | jq -R 'fromjson?
+    | select(.authorized == false and .response == "PERMISSION_DENIED")
+    | {time:.ts,response,status:.object.status,message:.object.message}'
+```
+
+Find a new decision from your test time with `response: "PERMISSION_DENIED"` and `status: 403`. The filter excludes missing-token authentication failures.
+
+If the deployment does not emit those JSON decision records, check the gateway proxy:
+
+```bash
+oc logs -n openshift-ingress \
+  -l gateway.networking.k8s.io/gateway-name=mcp-gateway \
+  -c istio-proxy --since-time="${MCP_DENIAL_SINCE}" --tail=200 \
+  | grep '"POST /mcp HTTP/1.1" 403' \
+  | grep 'mcp-server-test.mcp.local'
+```
+
+Count the test as passed after you find a denial matching this request's time and backend. Do not count an older HTTP 403 entry.
+
+**Checkpoint:** both token requests succeed; the reader gets Pod data; the no-tools call is denied by the tool policy.
+
+## Clean up and restore the starting point
+
+Remove the policies before deleting the realm they depend on.
+
+### 1. Remove the lab policies and OAuth metadata
+
+```bash
+oc delete authpolicy mcp-lab-authorization mcp-lab-authentication \
+  -n openshift-ingress --ignore-not-found
+
+oc patch mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  --type=merge -p '{"spec":{"oauthProtectedResource":null}}'
+oc rollout status deployment/mcp-gateway -n mcp-gateway --timeout=2m
+```
+
+You can clear this metadata because you confirmed it was empty in step 0.
+
+### 2. Restore the route only if you changed it
+
+**Skip this step if you used `kubeconfig` and made no route change.** If you followed the optional `passthrough` instructions in 3.2, restore your saved route:
+
+```bash
+oc patch httproute mcp-server-test-route -n mcp-exp \
+  --type=json --patch-file=backend-route-restore.json
+```
+
+This restores the route configuration saved in 3.2, including any filter that was already present.
+
+### 3. Remove your disposable Keycloak realm
+
+In the Administration Console, select `mcp-auth-lab`, open **Realm settings**, and use its delete action. Confirm that exact name. Delete it only if it belongs to this exercise; keep `master`, `sso`, and the Keycloak installation.
+
+### 4. Prove the original gateway still works
+
+```bash
+python3 mcp_auth_check.py
+
+oc get authpolicy -n openshift-ingress
+oc get mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  -o custom-columns='NAME:.metadata.name,OAUTH:.spec.oauthProtectedResource'
+oc wait mcpserverregistration/mcp-server-test -n mcp-exp \
+  --for=condition=Ready --timeout=2m
+
+unset MCP_READER_TOKEN MCP_NO_TOOLS_TOKEN KEYCLOAK_CLIENT_SECRET
+unset MCP_READER_PASSWORD MCP_NO_TOOLS_PASSWORD TOKEN_RESPONSE NO_TOOLS_RESPONSE
+unset KEYCLOAK_HOST KEYCLOAK_ISSUER MCP_GATEWAY_HOST MCP_GATEWAY_BASE
+unset MCP_RESOURCE MCP_METADATA_URL OAUTH_METADATA_PATCH AUTHORINO_NS MCP_DENIAL_SINCE
+```
+
+Expected: the unauthenticated Pod-list call works again, both lab policies are gone, OAuth metadata is empty, and the registration remains ready. Stop the tunnel with <kbd>Ctrl</kbd>+<kbd>C</kbd> in terminal 1.
+
+Keep Kuadrant, its namespace, the Operators, Gateway, backend, registration, and `mcp-viewer`. Kuadrant is the shared runtime you can reuse for the next exercise.
+
+## Final thoughts
+
+Authentication checks who is calling. Authorization decides what they may do. Both users could sign in, but only `mcp-reader` had the role needed to run the Pod-list tool.
+
+The backend's OpenShift permissions are separate. It uses `mcp-viewer` to access the cluster, and that ServiceAccount's RBAC permissions allow it to list Pods, but not delete them. Giving a user a tool role does not grant the backend more OpenShift permissions.
+
+## Sources and learn more
+
+- [Red Hat Connectivity Link 1.4: MCP Gateway overview and Technology Preview status](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/mcp_gateway/mcp-gateway-introduction).
+- [Red Hat Connectivity Link 1.4: MCP Gateway authentication](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/mcp-gateway-authentication).
+- [Red Hat Connectivity Link 1.4: MCP Gateway authorization](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/mcp-gateway-authorization).
+- [Red Hat Connectivity Link 1.4: create Kuadrant and check supported configurations](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/install_connectivity_link/rhcl-install-on-ocp).
+- [MCP Gateway v0.7.1 authentication guide](https://github.com/Kuadrant/mcp-gateway/blob/v0.7.1/docs/guides/authentication.md) and [authorization guide](https://github.com/Kuadrant/mcp-gateway/blob/v0.7.1/docs/guides/authorization.md).
+- [Red Hat build of Keycloak 26.4: access the Admin Console](https://docs.redhat.com/en/documentation/red_hat_build_of_keycloak/26.4/html/operator_guide/basic-deployment-).
+- [Red Hat build of Keycloak 26.4: clients, roles, and scopes](https://docs.redhat.com/en/documentation/red_hat_build_of_keycloak/26.4/html/server_administration_guide/assembly-managing-clients_server_administration_guide).
+- [OAuth 2.0: access-token response fields, including expires_in](https://www.rfc-editor.org/rfc/rfc6749#section-5.1).
+- [Gateway API: request-header removal](https://gateway-api.sigs.k8s.io/guides/user-guides/http-header-modifier/).
+- [OpenShift MCP server: Kubernetes credential selection](https://github.com/openshift/openshift-mcp-server/blob/c5d3fa30bef36ba8b0c9001ea4b2349227a2b41d/pkg/kubernetes/manager.go).
+- [Previous lab: integrate MCP Gateway with OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/connect-openshift-lightspeed-to-mcp-gateway/).
+
+*Sources checked: 2026-10-06*

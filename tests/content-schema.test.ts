@@ -36,6 +36,14 @@ describe('postSchema', () => {
     expect(postSchema.safeParse(validLab).success).toBe(true);
   });
 
+  it.each(['reading', 'completion'])('accepts an explicit %s time estimate', (timeEstimateType) => {
+    expect(postSchema.safeParse({ ...validLab, timeEstimateType }).success).toBe(true);
+  });
+
+  it('leaves the time estimate type unset for existing articles', () => {
+    expect(postSchema.parse(validLab).timeEstimateType).toBeUndefined();
+  });
+
   it('accepts a published guide without fabricated tested versions', () => {
     expect(postSchema.safeParse({ ...validLab, kind: 'guide', testedVersions: [] }).success).toBe(true);
   });
@@ -124,9 +132,10 @@ describe('postSchema', () => {
   it.each([
     [{ ...validLab, kind: 'reference' }, 'uncontrolled content kind'],
     [{ ...validLab, estimatedMinutes: 0 }, 'non-positive duration'],
+    [{ ...validLab, timeEstimateType: 'unknown' }, 'uncontrolled time estimate type'],
     [{ ...validLab, difficulty: 'easy' }, 'uncontrolled difficulty'],
     [{ ...validLab, testedVersions: [''] }, 'blank tested version']
-  ])('rejects %s', (input) => {
+  ])('rejects %s', (input, _description) => {
     expect(postSchema.safeParse(input).success).toBe(false);
   });
 });

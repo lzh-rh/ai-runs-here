@@ -34,6 +34,7 @@ tags:
   - mcp
 difficulty: beginner
 estimatedMinutes: 10
+timeEstimateType: reading # Optional: reading or completion; omit to keep the generic minutes label.
 testedVersions: []
 prerequisites: []
 draft: true

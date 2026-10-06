@@ -1,0 +1,29 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: mcp-server-test-route
+  namespace: mcp-exp
+  labels:
+    mcp-server: "true"
+spec:
+  hostnames:
+    - mcp-server-test.mcp.local
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: mcp-gateway
+      namespace: openshift-ingress
+      sectionName: mcps
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /mcp
+      filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier:
+            remove:
+              - Authorization
+      backendRefs:
+        - name: mcp-server-test
+          port: 8080
