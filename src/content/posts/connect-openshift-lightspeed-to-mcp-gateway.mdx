@@ -3,7 +3,7 @@ kind: lab
 title: "Integrate MCP Gateway with OpenShift Lightspeed: a beginner lab"
 description: Build a read-only path from OpenShift Lightspeed through MCP Gateway to the OpenShift API, with a checkpoint at every boundary.
 publishedDate: 2026-09-25
-updatedDate: 2026-09-25
+updatedDate: 2026-10-23
 topic: mcp-gateway
 tags:
   - OpenShift
@@ -15,12 +15,11 @@ difficulty: beginner
 estimatedMinutes: 21
 tocDepth: 3
 testedVersions:
-  - OpenShift Container Platform 4.22
-  - Red Hat OpenShift AI 3.5.0
-  - MCP Gateway Operator 0.7.1
-  - OpenShift MCP server 0.4
-  - Red Hat Connectivity Link 1.4.1
-  - OpenShift Lightspeed 1.1.3
+  - OpenShift Container Platform 4.22 (original end-to-end baseline)
+  - Red Hat OpenShift AI 3.5.0 (original end-to-end baseline)
+  - OpenShift MCP server 0.4 (original end-to-end baseline)
+  - Red Hat Connectivity Link 1.5 MCP APIs (live discovery verified)
+  - OpenShift Lightspeed 1.1.3 (original end-to-end baseline)
 prerequisites:
   - Cluster administrator access to an OpenShift learning cluster
   - OpenShift Lightspeed with normal chat working
@@ -44,9 +43,9 @@ If you want to see what happens inside the Gateway when Lightspeed lists or call
 
 You will deploy the MCP server, check its readiness, and test a tool call through the Gateway before connecting Lightspeed. These checkpoints help you locate a problem before adding the next component.
 
-<ArticleCallout variant="important" title="Important">
-  <p>MCP gateway is a Technology Preview feature only. Technology Preview features are not supported with Red Hat production service level agreements (SLAs) and might not be functionally complete. Red Hat does not recommend using them in production. These features offer early access to upcoming product features, enabling customers to test functionality and give feedback during the development process.</p>
-  <p>For more information about the support scope of Red Hat Technology Preview features, see <a href="https://access.redhat.com/support/offerings/techpreview/">Technology Preview Features Support Scope</a>.</p>
+<ArticleCallout variant="important" title="Connectivity Link 1.5 update">
+  <p>MCP Gateway is generally available as part of Red Hat Connectivity Link 1.5. This revision uses <code>mcp.kuadrant.io/v1</code> for the MCP custom resources, matching live OpenShift API discovery and the current upstream MCP Gateway examples.</p>
+  <p>The API migration was verified on October 23, 2026, but the complete end-to-end lab was not rerun during this edit. Run each checkpoint on a learning cluster before using the design elsewhere.</p>
 </ArticleCallout>
 
 ## What you will learn
@@ -58,7 +57,7 @@ You will deploy the MCP server, check its readiness, and test a tool call throug
 
 ## Before you begin
 
-The versions listed above are the tested baseline. Newer versions may work, but this lab has not verified them. Check your releases' documentation for compatible component versions and changes to the UI or configuration.
+Most versions listed above are the original end-to-end baseline. The Connectivity Link 1.5 API change was checked separately against live API discovery. Check your releases' documentation for compatible component versions and changes to the UI or configuration.
 
 Log in to your learning cluster as an administrator in the web console and `oc`. Start with working Lightspeed chat; see [Understanding OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/understanding-openshift-lightspeed/) if you need setup guidance.
 
@@ -394,18 +393,18 @@ In the OpenShift web console, open **Ecosystem > Software Catalog** and search f
 <ArticleImage
   src="/images/mcp-gateway-ols/09-mcp-gateway-operator.png"
   alt="OpenShift Software Catalog showing MCP Gateway Operator Technology Preview"
-  caption="MCP Gateway Operator is a separate installation from Red Hat OpenShift AI."
+  caption="This older screenshot shows where to find the Operator. Connectivity Link 1.5 provides the generally available MCP Gateway release, so the catalog badge can differ."
 />
 
-The installation dialog already selects the `preview` channel, version `0.7.1`, all namespaces, and `openshift-operators`. Leave these defaults in place and click **Install**. If your organization has a different update policy, follow it instead.
+Install the MCP Gateway Operator release supplied for Red Hat Connectivity Link 1.5. Follow your organization's approved channel, namespace, and update policy; do not copy the older preview channel or version shown in the following screenshot.
 
 <ArticleImage
   src="/images/mcp-gateway-ols/10-mcp-gateway-install-settings.png"
   alt="MCP Gateway Operator installation settings showing preview channel, all namespaces, and openshift-operators"
-  caption="This screenshot shows version 0.7.1. Use a newer 0.7 maintenance release only after checking its release notes."
+  caption="Historical 0.7.1 preview settings are shown only for navigation. Use the Connectivity Link 1.5 installation settings for your cluster."
 />
 
-Operator Lifecycle Manager installs Red Hat Connectivity Link as a dependency. Use version 1.4.1 or later in the 1.4 stream; version 1.4.0 is deprecated.
+Operator Lifecycle Manager installs the required dependencies declared by the Operator bundle. Wait for the installation to finish before checking which API version the cluster actually serves.
 
 Check the installation:
 
@@ -413,6 +412,16 @@ Check the installation:
 oc get csv -n openshift-operators | grep -Ei 'mcp-gateway|rhcl|connectivity'
 oc get crd | grep mcp.kuadrant.io
 ```
+
+Now bypass the local discovery cache and ask the API server for the MCP resources it currently serves:
+
+```bash
+oc api-resources --api-group=mcp.kuadrant.io --cached=false
+```
+
+For Connectivity Link 1.5, the `APIVERSION` column must show `mcp.kuadrant.io/v1` for `MCPGatewayExtension`, `MCPServerRegistration`, and `MCPVirtualServer`. This lab creates the first two. If either one is missing or reports another version, stop and use the manifests for the release installed on your cluster.
+
+The `apiVersion` in each YAML document tells the Kubernetes API server which schema to use for that `kind`. The resource names did not change here, but the served schema version changed from `v1alpha1` to `v1`. The `--cached=false` flag matters because it prevents an older client-side discovery result from hiding that change.
 
 ## 4. Configure and register the Gateway
 
@@ -535,7 +544,7 @@ spec:
       kind: Gateway
       name: mcp-gateway
 ---
-apiVersion: mcp.kuadrant.io/v1alpha1
+apiVersion: mcp.kuadrant.io/v1
 kind: MCPGatewayExtension
 metadata:
   name: mcp-gateway-extension
@@ -594,7 +603,7 @@ spec:
         - name: mcp-server-test
           port: 8080
 ---
-apiVersion: mcp.kuadrant.io/v1alpha1
+apiVersion: mcp.kuadrant.io/v1
 kind: MCPServerRegistration
 metadata:
   name: mcp-server-test
@@ -815,15 +824,14 @@ In future articles, we will experiment with authentication, tool-level authoriza
 
 - [Enable MCP server lifecycle management in OpenShift AI](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_the_mcp_catalog/enabling-mcp-lifecycle-management)
 - [Configure Gateway API in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/configuring-gateway-api)
-- [Install MCP Gateway](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/install_the_mcp_gateway/mcp-gateway-install)
-- [MCP Gateway architecture and benefits](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/mcp_gateway/mcp-gateway-introduction)
-- [Register MCP servers and configure policies](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/index)
-- [Configure MCP Gateway authentication](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/register_mcp_servers_and_create_policies/mcp-gateway-authentication)
-- [Observe MCP Gateway connections](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.4/html/observability/mcp-gateway-observe)
+- [Red Hat Connectivity Link 1.5 product documentation](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5)
+- [MCP Gateway is generally available with Connectivity Link 1.5](https://www.redhat.com/en/blog/model-context-protocol-gateway-red-hat-openshift-now-generally-available)
 - [Upstream MCP server registration guide](https://github.com/Kuadrant/mcp-gateway/blob/main/docs/guides/register-mcp-servers.md)
 - [OpenShift MCP server configuration](https://github.com/openshift/openshift-mcp-server/blob/release-0.4/docs/configuration.md)
 - [Understanding and creating service accounts in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/authentication_and_authorization/understanding-and-creating-service-accounts)
 - [Configure a custom MCP server in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed)
 - [Model Context Protocol architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture)
 
-*Sources checked: 2026-09-25*
+*Sources checked: 2026-10-23*
+
+*Last updated: 2026-10-23*
