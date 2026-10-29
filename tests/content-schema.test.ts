@@ -36,6 +36,14 @@ describe('postSchema', () => {
     expect(postSchema.safeParse(validLab).success).toBe(true);
   });
 
+  it('allows an article to hide tested versions while retaining its metadata', () => {
+    expect(postSchema.parse({ ...validLab, showTestedVersions: false }).showTestedVersions).toBe(false);
+  });
+
+  it('keeps tested-version visibility unchanged for existing articles', () => {
+    expect(postSchema.parse(validLab).showTestedVersions).toBeUndefined();
+  });
+
   it.each(['reading', 'completion'])('accepts an explicit %s time estimate', (timeEstimateType) => {
     expect(postSchema.safeParse({ ...validLab, timeEstimateType }).success).toBe(true);
   });

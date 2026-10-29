@@ -27,6 +27,7 @@ const postFields = z.object({
   timeEstimateType: z.enum(['reading', 'completion']).optional(),
   tocDepth: z.union([z.literal(2), z.literal(3)]).default(3),
   testedVersions: z.array(trimmedString.min(3)),
+  showTestedVersions: z.boolean().optional(),
   prerequisites: z.array(trimmedString.min(3)).default([]),
   draft: z.boolean().default(false),
   featured: z.boolean().default(false),

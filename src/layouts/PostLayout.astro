@@ -11,7 +11,7 @@ interface Props {
 }
 
 const { post, headings } = Astro.props;
-const showEnvironment = post.data.testedVersions.length > 0;
+const showEnvironment = post.data.showTestedVersions !== false && post.data.testedVersions.length > 0;
 const showPrerequisites = post.data.prerequisites.length > 0;
 const setupHeadings: MarkdownHeading[] = [
   ...(showEnvironment ? [{ depth: 2, slug: 'tested-versions-title', text: 'Tested versions' }] : []),

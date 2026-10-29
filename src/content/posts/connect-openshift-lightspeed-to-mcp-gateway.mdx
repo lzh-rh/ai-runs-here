@@ -3,7 +3,7 @@ kind: lab
 title: "Integrate MCP Gateway with OpenShift Lightspeed: a beginner lab"
 description: Build a read-only path from OpenShift Lightspeed through MCP Gateway to the OpenShift API, with a checkpoint at every boundary.
 publishedDate: 2026-09-25
-updatedDate: 2026-10-23
+updatedDate: 2026-10-29
 topic: mcp-gateway
 tags:
   - OpenShift
@@ -14,6 +14,7 @@ tags:
 difficulty: beginner
 estimatedMinutes: 21
 tocDepth: 3
+showTestedVersions: false
 testedVersions:
   - OpenShift Container Platform 4.22 (original end-to-end baseline)
   - Red Hat OpenShift AI 3.5.0 (original end-to-end baseline)
@@ -29,7 +30,6 @@ draft: false
 featured: false
 ---
 
-import ArticleCallout from '../../components/ArticleCallout.astro';
 import ArticleImage from '../../components/ArticleImage.astro';
 import McpGatewayOlsFlow from '../../components/McpGatewayOlsFlow.astro';
 
@@ -43,11 +43,6 @@ If you want to see what happens inside the Gateway when Lightspeed lists or call
 
 You will deploy the MCP server, check its readiness, and test a tool call through the Gateway before connecting Lightspeed. These checkpoints help you locate a problem before adding the next component.
 
-<ArticleCallout variant="important" title="Connectivity Link 1.5 update">
-  <p>MCP Gateway is generally available as part of Red Hat Connectivity Link 1.5. This revision uses <code>mcp.kuadrant.io/v1</code> for the MCP custom resources, matching live OpenShift API discovery and the current upstream MCP Gateway examples.</p>
-  <p>The API migration was verified on October 23, 2026, but the complete end-to-end lab was not rerun during this edit. Run each checkpoint on a learning cluster before using the design elsewhere.</p>
-</ArticleCallout>
-
 ## What you will learn
 
 - How to deploy a read-only OpenShift MCP server.
@@ -56,8 +51,6 @@ You will deploy the MCP server, check its readiness, and test a tool call throug
 - How to connect OpenShift Lightspeed to one Gateway URL.
 
 ## Before you begin
-
-Most versions listed above are the original end-to-end baseline. The Connectivity Link 1.5 API change was checked separately against live API discovery. Check your releases' documentation for compatible component versions and changes to the UI or configuration.
 
 Log in to your learning cluster as an administrator in the web console and `oc`. Start with working Lightspeed chat; see [Understanding OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/understanding-openshift-lightspeed/) if you need setup guidance.
 
@@ -142,7 +135,7 @@ oc patch datasciencecluster "${DSC_NAME}" \
   -p '{"spec":{"components":{"mcplifecycleoperator":{"managementState":"Managed"}}}}'
 ```
 
-The `mcplifecycleoperator` component watches `MCPServer` objects and manages their workloads. MCP Gateway is a separate Operator that you install later.
+The `mcplifecycleoperator` component watches `MCPServer` objects and manages their workloads. You will install Red Hat Connectivity Link 1.5 for MCP Gateway in step 3.
 
 Confirm that the lifecycle operator is running before you continue:
 
@@ -359,9 +352,9 @@ oc get pods -n mcp-exp -w
 
 The managed Deployment creates a replacement Pod. Continue when the new pod is running, then press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop watching.
 
-## 3. Install MCP Gateway
+## 3. Install Connectivity Link 1.5
 
-With the MCP server running, install the Gateway that will connect it to Lightspeed.
+With the MCP server running, install Red Hat Connectivity Link 1.5 for the Gateway that will connect it to Lightspeed. This lab uses the bundled MCP Gateway controller, so you do not install a separate MCP Gateway Operator.
 
 ### Create the OpenShift GatewayClass
 
@@ -386,42 +379,65 @@ oc get gatewayclass openshift-default
 
 Continue when `GatewayClass/openshift-default` reports `Accepted=True`.
 
-### Install the MCP Gateway Operator
+### Install the Connectivity Link Operator
 
-In the OpenShift web console, open **Ecosystem > Software Catalog** and search for **MCP Gateway Operator**.
+In the OpenShift web console:
 
-<ArticleImage
-  src="/images/mcp-gateway-ols/09-mcp-gateway-operator.png"
-  alt="OpenShift Software Catalog showing MCP Gateway Operator Technology Preview"
-  caption="This older screenshot shows where to find the Operator. Connectivity Link 1.5 provides the generally available MCP Gateway release, so the catalog badge can differ."
-/>
-
-Install the MCP Gateway Operator release supplied for Red Hat Connectivity Link 1.5. Follow your organization's approved channel, namespace, and update policy; do not copy the older preview channel or version shown in the following screenshot.
+1. Open **Ecosystem > Software Catalog**.
+2. Search for **Red Hat Connectivity Link** and open the Operator provided by Red Hat.
+3. Select channel **stable-1.5** and version **1.5.0**, as shown below, then click **Install**.
 
 <ArticleImage
-  src="/images/mcp-gateway-ols/10-mcp-gateway-install-settings.png"
-  alt="MCP Gateway Operator installation settings showing preview channel, all namespaces, and openshift-operators"
-  caption="Historical 0.7.1 preview settings are shown only for navigation. Use the Connectivity Link 1.5 installation settings for your cluster."
+  src="/images/mcp-gateway-ols/09-connectivity-link-operator.png"
+  alt="Red Hat Connectivity Link catalog entry with channel stable-1.5 and version 1.5.0 selected"
+  caption="Install Red Hat Connectivity Link 1.5 from the Software Catalog."
 />
 
-Operator Lifecycle Manager installs the required dependencies declared by the Operator bundle. Wait for the installation to finish before checking which API version the cluster actually serves.
+On the installation page, keep **All namespaces on the cluster**, **openshift-operators**, and **Console plugin: Enable**, as shown in the screenshot. Choose the update-approval option required by your organization, then click **Install**.
 
-Check the installation:
+<ArticleImage
+  src="/images/mcp-gateway-ols/10-connectivity-link-install-settings.png"
+  alt="Connectivity Link installation settings showing stable-1.5, version 1.5.0, all namespaces, openshift-operators, and the console plugin enabled"
+  caption="The screenshot uses automatic update approval. Follow your organization's policy for this setting."
+/>
+
+Wait for **Red Hat Connectivity Link** to show **Succeeded** under **Ecosystem > Installed Operators**. You can also check from the terminal:
 
 ```bash
-oc get csv -n openshift-operators | grep -Ei 'mcp-gateway|rhcl|connectivity'
-oc get crd | grep mcp.kuadrant.io
+oc get csv -n openshift-operators | grep rhcl-operator
 ```
 
-Now bypass the local discovery cache and ask the API server for the MCP resources it currently serves:
+### Create the Connectivity Link instance
+
+The Operator needs a `Kuadrant` resource to configure the Connectivity Link components. In **Installed Operators > Red Hat Connectivity Link**, open the **Kuadrant** tab and click **Create Kuadrant**. Switch to **YAML view**, paste the following content, and click **Create**.
+
+If a `Kuadrant` instance already exists, keep it and check its readiness instead of creating another one.
+
+```yaml
+apiVersion: kuadrant.io/v1beta1
+kind: Kuadrant
+metadata:
+  name: kuadrant
+  namespace: openshift-operators
+spec: {}
+```
+
+If you prefer the terminal, save the YAML as `02-kuadrant.yaml`, then validate and apply it. Skip these two commands if you created the resource in the console:
 
 ```bash
-oc api-resources --api-group=mcp.kuadrant.io --cached=false
+oc apply --dry-run=server -f 02-kuadrant.yaml
+oc apply -f 02-kuadrant.yaml
 ```
 
-For Connectivity Link 1.5, the `APIVERSION` column must show `mcp.kuadrant.io/v1` for `MCPGatewayExtension`, `MCPServerRegistration`, and `MCPVirtualServer`. This lab creates the first two. If either one is missing or reports another version, stop and use the manifests for the release installed on your cluster.
+Check readiness. If you reused an existing instance with a different name, replace `kuadrant` in the first command with its name:
 
-The `apiVersion` in each YAML document tells the Kubernetes API server which schema to use for that `kind`. The resource names did not change here, but the served schema version changed from `v1alpha1` to `v1`. The `--cached=false` flag matters because it prevents an older client-side discovery result from hiding that change.
+```bash
+oc wait kuadrant/kuadrant -n openshift-operators \
+  --for=condition=Ready --timeout=5m
+oc get pods -n openshift-operators
+```
+
+Continue when the instance reports `Ready=True` and its component Pods are running. See the [Connectivity Link installation guide](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5/html/install_connectivity_link/rhcl-install-on-ocp#rhcl-install-ocp-web-console_install-on-ocp) for the console procedure.
 
 ## 4. Configure and register the Gateway
 
@@ -824,7 +840,8 @@ In future articles, we will experiment with authentication, tool-level authoriza
 
 - [Enable MCP server lifecycle management in OpenShift AI](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/working_with_the_mcp_catalog/enabling-mcp-lifecycle-management)
 - [Configure Gateway API in OpenShift](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/ingress_and_load_balancing/configuring-gateway-api)
-- [Red Hat Connectivity Link 1.5 product documentation](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5)
+- [Install Red Hat Connectivity Link 1.5](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5/html/install_connectivity_link/rhcl-install-on-ocp#rhcl-install-ocp-web-console_install-on-ocp)
+- [Upstream installer: use the bundled MCP Gateway controller when available](https://github.com/Kuadrant/mcp-gateway/blob/9c49499ec2c2703c799a4af2e1eda79a9a7c2e56/config/openshift/deploy_openshift.sh)
 - [MCP Gateway is generally available with Connectivity Link 1.5](https://www.redhat.com/en/blog/model-context-protocol-gateway-red-hat-openshift-now-generally-available)
 - [Upstream MCP server registration guide](https://github.com/Kuadrant/mcp-gateway/blob/main/docs/guides/register-mcp-servers.md)
 - [OpenShift MCP server configuration](https://github.com/openshift/openshift-mcp-server/blob/release-0.4/docs/configuration.md)
@@ -832,6 +849,6 @@ In future articles, we will experiment with authentication, tool-level authoriza
 - [Configure a custom MCP server in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed)
 - [Model Context Protocol architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture)
 
-*Sources checked: 2026-10-23*
+*Sources checked: 2026-10-23. Connectivity Link installation rechecked: 2026-10-29.*
 
-*Last updated: 2026-10-23*
+*Last updated: 2026-10-29*
