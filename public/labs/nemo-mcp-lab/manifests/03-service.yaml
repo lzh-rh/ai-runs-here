@@ -1,0 +1,15 @@
+# Lab-only internal checks connection.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nemo-lab-checks
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+spec:
+  selector:
+    app: nemo-lab
+  ports:
+    - name: checks
+      port: 8000
+      targetPort: 8000

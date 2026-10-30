@@ -1,0 +1,595 @@
+---
+kind: lab
+title: "Guard MCP tool calls with NeMo: a beginner lab"
+description: Block tool calls and mask sensitive results with NeMo Guardrails and MCP Gateway. Test the same rules with curl and OpenShift Lightspeed chat.
+publishedDate: 2026-10-30
+updatedDate: 2026-10-30
+topic: mcp-gateway
+tags:
+  - OpenShift
+  - MCP Gateway
+  - Connectivity Link
+  - NeMo Guardrails
+  - OpenShift AI
+  - OpenShift Lightspeed
+difficulty: beginner
+estimatedMinutes: 16
+timeEstimateType: reading
+tocDepth: 3
+testedVersions:
+  - Red Hat Connectivity Link 1.5.0
+  - Red Hat OpenShift AI 3.5.2
+prerequisites:
+  - A supported OpenShift learning cluster with Connectivity Link 1.5 and OpenShift AI 3.5 TrustyAI installed
+  - The MCP Gateway and Lightspeed setup lab completed
+  - OpenShift Lightspeed configured with a model that supports tool calling
+  - Cluster administrator access through oc, curl, unzip, and two terminal windows
+draft: false
+featured: false
+---
+
+import ArticleCallout from '../../components/ArticleCallout.astro';
+import McpNemoArchitecture from '../../components/McpNemoArchitecture.astro';
+import { withBase } from '../../config/site';
+
+**NeMo Guardrails** checks tool-call arguments and results against your rules. With MCP Gateway, it can block unsafe calls, mask sensitive information, and detect prompt injection attempts.
+
+In this lab, you’ll block `LAB_BLOCK_ME` in tool arguments and replace `alice@example.com` with `<EMAIL_ADDRESS>` in tool results. You’ll test both rules with curl, then use them from OpenShift Lightspeed chat.
+
+Before you begin, complete the <a href={withBase('/articles/connect-openshift-lightspeed-to-mcp-gateway/#6-connect-openshift-lightspeed')}>MCP Gateway and Lightspeed setup lab</a>. This experiment uses the gateway as Lightspeed’s only source of OpenShift tools so those calls pass through NeMo.
+
+<ArticleCallout variant="important" title="Important">
+  <p>NeMo Guardrails is a Technology Preview feature only. Technology Preview features are not supported with Red Hat production service level agreements (SLAs) and might not be functionally complete. Red Hat does not recommend using them in production. These features offer early access to upcoming product features, enabling customers to test functionality and give feedback during the development process.</p>
+  <p>For more information about the support scope of Red Hat Technology Preview features, see <a href="https://access.redhat.com/support/offerings/techpreview/">Technology Preview Features Support Scope</a>.</p>
+</ArticleCallout>
+
+## The architecture
+
+NeMo checks arguments before a tool runs and returned text before the client receives it. The gateway enforces NeMo’s **verdict**: `passed`, `blocked`, or `modified`.
+
+<McpNemoArchitecture client="both" />
+
+Expand the diagram’s configuration view to see how the YAML files connect these components.
+
+## What you will learn
+
+- Set up NeMo and test its input and output rules with curl.
+- Connect those rules to MCP Gateway and follow a tool call from your terminal to OpenShift and back.
+- Use Lightspeed chat to confirm normal calls succeed, matching arguments are blocked, and detected emails are masked.
+
+## 0. Prepare your files and terminals
+
+Use **Terminal 1** for port-forwards and **Terminal 2** for all other commands. Keep Terminal 2 open through cleanup to preserve the MCP session.
+
+A **port-forward** opens a temporary tunnel from your computer to a pod in OpenShift. Test NeMo first, then switch the tunnel to the gateway:
+
+<div className="article-table article-table--wrap" tabIndex={0} role="region" aria-label="The two lab test connections">
+
+| Test | Local URL | Destination |
+| --- | --- | --- |
+| NeMo alone | `http://127.0.0.1:18082/v1/checks` | NeMo, port 8000 |
+| Full tool call | `http://127.0.0.1:18080/mcp` | Gateway Service, port 8080 |
+
+</div>
+
+### Check the prerequisites
+
+Run in Terminal 2:
+
+~~~bash
+oc whoami
+RHCL_NS=$(oc get subscription -A -o jsonpath='{.items[?(@.spec.name=="rhcl-operator")].metadata.namespace}')
+oc get csv -n "$RHCL_NS" | grep rhcl-operator
+oc get crd nemoguardrails.trustyai.opendatahub.io
+oc get deployment trustyai-service-operator-controller-manager -n redhat-ods-applications
+oc get mcpgatewayextension mcp-gateway-extension -n mcp-gateway
+oc get mcpserverregistration mcp-server-test -n mcp-exp
+oc get deployment lightspeed-app-server -n openshift-lightspeed
+~~~
+
+<div className="article-table article-table--wrap" tabIndex={0} role="region" aria-label="Prerequisite check results">
+
+| Check | Expected result |
+| --- | --- |
+| Login | Your username |
+| Connectivity Link | Version `1.5.x`, phase `Succeeded` |
+| NeMo CRD | `nemoguardrails.trustyai.opendatahub.io` is listed |
+| TrustyAI and Lightspeed Deployments | `READY: 1/1` |
+| Gateway extension and server registration | `READY: True` |
+
+</div>
+
+Check the Lightspeed connection:
+
+~~~bash
+oc get olsconfig cluster -o jsonpath='featureGates={.spec.featureGates}{"\n"}introspectionEnabled={.spec.ols.introspectionEnabled}{"\n"}{range .spec.mcpServers[*]}{.name}{" -> "}{.url}{"\n"}{end}'
+~~~
+
+Expected result: `MCPServer` is enabled, `introspectionEnabled` is `false`, and the OpenShift tools use this gateway URL:
+
+~~~text
+http://mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local:8080/mcp
+~~~
+
+### Download the files
+
+<a href={withBase('/labs/nemo-mcp-lab.zip')} download>Download the lab bundle</a>, then run:
+
+~~~bash
+mkdir -p "$HOME/nemo-mcp-lab"
+unzip "$HOME/Downloads/nemo-mcp-lab.zip" -d "$HOME/nemo-mcp-lab"
+cd "$HOME/nemo-mcp-lab"
+ls manifests
+~~~
+
+## 1. Write the rules
+
+Store the rules in a **ConfigMap**, a [Kubernetes object for non-confidential key-value data](https://kubernetes.io/docs/concepts/configuration/configmap/#configmap-object). This one holds the marker-blocking and email-masking configuration.
+
+`manifests/01-rules.yaml`:
+
+~~~yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemo-lab-baseline
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+data:
+  config.yaml: |
+    rails:
+      config:
+        regex_detection:
+          input:
+            patterns: ['LAB_BLOCK_ME']
+            case_insensitive: true
+        sensitive_data_detection:
+          output:
+            entities: [EMAIL_ADDRESS]
+      input:
+        flows: [regex check input]
+      output:
+        flows: [mask sensitive data on output]
+  rails.co: |
+    # Uses the built-in NeMo flows named in config.yaml.
+~~~
+
+<details>
+<summary>Rule configuration</summary>
+
+The ConfigMap stores two files under `data`: `config.yaml` and `rails.co`. The `|` preserves each file as a multiline text value.
+
+A **rail** checks or changes text; a **flow** defines how it runs. Under `rails.config`, set what to detect:
+
+- `regex_detection.input.patterns` holds a **regular expression**, or regex, that matches `LAB_BLOCK_ME`. With `case_insensitive: true`, it also matches `lab_block_me`.
+- `sensitive_data_detection.output.entities: [EMAIL_ADDRESS]` selects email addresses. NeMo uses **Presidio**, a sensitive-data detection library, to find them.
+
+The `rails.input.flows` and `rails.output.flows` lists enable the checks. Use the built-in names `regex check input` and `mask sensitive data on output` as shown.
+
+`rails.co` holds custom flows in NeMo’s Colang language. A comment is enough here because both flows are built in.
+
+See [NeMo Guardrails library flows, section 1.6](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/enabling_ai_safety_with_guardrails/enabling-ai-safety-with-nemo-guardrails_nemo-guardrails#nemo-guardrails-library-flows-reference_nemo-guardrails) and [Presidio's supported entities, including `EMAIL_ADDRESS`](https://presidio.dataprivacystack.org/supported_entities/#global).
+
+</details>
+
+Save the rules in OpenShift:
+
+~~~bash
+oc apply --dry-run=server -f manifests/01-rules.yaml
+oc apply -f manifests/01-rules.yaml
+oc get configmap nemo-lab-baseline -n mcp-gateway
+~~~
+
+**Verification:** `oc get` lists `nemo-lab-baseline`.
+
+## 2. Start NeMo
+
+Create a **NemoGuardrails resource** that points to the rules ConfigMap. The TrustyAI Operator uses it to start NeMo.
+
+`manifests/02-nemo.yaml`:
+
+~~~yaml
+# Operator-managed HTTPS access remains authenticated.
+apiVersion: trustyai.opendatahub.io/v1alpha1
+kind: NemoGuardrails
+metadata:
+  name: nemo-lab
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+  annotations:
+    security.opendatahub.io/enable-auth: 'true'
+spec:
+  replicas: 1
+  nemoConfigs:
+    - name: lab-baseline
+      configMaps: [nemo-lab-baseline]
+      default: true
+~~~
+
+<details>
+<summary>NeMo configuration</summary>
+
+The `security.opendatahub.io/enable-auth: 'true'` annotation enables authentication on the Operator-managed route. Step 3 creates an internal Service that connects to NeMo's HTTP port without that authentication proxy.
+
+Under `spec`, `replicas: 1` requests one pod. The `nemoConfigs` entry loads the rules:
+
+- `name: lab-baseline` assigns the **configuration ID** used in check requests.
+- `configMaps: [nemo-lab-baseline]` references the rules ConfigMap. The Operator mounts its files in the pod.
+- `default: true` selects this configuration for direct NeMo requests that omit configuration IDs.
+
+The [NeMo custom resource configuration reference, section 1.2.7](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/enabling_ai_safety_with_guardrails/enabling-ai-safety-with-nemo-guardrails_nemo-guardrails#nemo-guardrails-custom-resource-configuration-reference_nemo-guardrails) describes these fields.
+
+</details>
+
+~~~bash
+oc apply --dry-run=server -f manifests/02-nemo.yaml
+oc apply -f manifests/02-nemo.yaml
+oc get nemoguardrails nemo-lab -n mcp-gateway
+~~~
+
+Repeat `oc get` until the phase is `Ready`, then check the Deployment and pod:
+
+~~~bash
+oc rollout status deployment/nemo-lab -n mcp-gateway --timeout=300s
+oc get pods -n mcp-gateway -l app=nemo-lab
+~~~
+
+**Verification:** the rollout completes and the NeMo pod is Ready.
+
+## 3. Give NeMo a stable address
+
+Create a **Service** to give NeMo a stable address inside the cluster. It forwards connections to pods labeled `app: nemo-lab`.
+
+`manifests/03-service.yaml`:
+
+~~~yaml
+# Lab-only internal checks connection.
+apiVersion: v1
+kind: Service
+metadata:
+  name: nemo-lab-checks
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+spec:
+  selector:
+    app: nemo-lab
+  ports:
+    - name: checks
+      port: 8000
+      targetPort: 8000
+~~~
+
+<details>
+<summary>Service configuration</summary>
+
+The Service selects pods with `app: nemo-lab` in `mcp-gateway`. It accepts connections on `port: 8000` and forwards them to `targetPort: 8000` on the NeMo pod.
+
+The gateway uses `nemo-lab-checks.mcp-gateway.svc.cluster.local:8000` to reach NeMo.
+
+See [Kubernetes Services](https://kubernetes.io/docs/concepts/services-networking/service/) for the selector-to-pod relationship.
+
+</details>
+
+~~~bash
+oc apply --dry-run=server -f manifests/03-service.yaml
+oc apply -f manifests/03-service.yaml
+oc get endpointslice -n mcp-gateway \
+  -l kubernetes.io/service-name=nemo-lab-checks
+~~~
+
+**Verification:** `PORTS` shows `8000`, and `ENDPOINTS` lists the NeMo pod IP. If the list is empty, check the pod's label and readiness before continuing.
+
+## 4. Test NeMo on its own
+
+Test the rules directly in NeMo first. In **Terminal 1**, open this tunnel and leave it running:
+
+~~~bash
+oc port-forward deployment/nemo-lab -n mcp-gateway 18082:8000
+~~~
+
+Wait for `Forwarding from 127.0.0.1:18082`. If that port is busy, choose another local port and update the URLs below.
+
+In **Terminal 2**, send these requests to NeMo's `/v1/checks` API. They inspect text without running an MCP tool.
+
+### Allow ordinary input
+
+Start with the namespace value from a normal Pod-list request:
+
+~~~bash
+curl --noproxy '*' -sS -i \
+  -H 'Content-Type: application/json' \
+  --data-binary @- http://127.0.0.1:18082/v1/checks <<'JSON'
+{"model":"guardrails-only","messages":[{"role":"user","name":"lab_test","content":"{\"namespace\":\"mcp-exp\"}","config":"tool"}],"guardrails":{"config_ids":["lab-baseline"]}}
+JSON
+~~~
+
+**Expected result:** HTTP `200` with `status: passed`.
+
+### Block the marker
+
+Add a label selector containing `LAB_BLOCK_ME` to match your input rule:
+
+~~~bash
+curl --noproxy '*' -sS -i \
+  -H 'Content-Type: application/json' \
+  --data-binary @- http://127.0.0.1:18082/v1/checks <<'JSON'
+{"model":"guardrails-only","messages":[{"role":"user","name":"lab_test","content":"{\"namespace\":\"mcp-exp\",\"labelSelector\":\"demo=LAB_BLOCK_ME\"}","config":"tool"}],"guardrails":{"config_ids":["lab-baseline"]}}
+JSON
+~~~
+
+**Expected result:** HTTP `200` with `status: blocked` and the `regex check input` rail.
+
+### Mask an email in output
+
+Use `role: assistant` to check sample output text containing the email address:
+
+~~~bash
+curl --noproxy '*' -sS -i \
+  -H 'Content-Type: application/json' \
+  --data-binary @- http://127.0.0.1:18082/v1/checks <<'JSON'
+{"model":"guardrails-only","messages":[{"role":"assistant","name":"lab_test","content":"Contact alice@example.com"}],"guardrails":{"config_ids":["lab-baseline"]}}
+JSON
+~~~
+
+**Expected result:** HTTP `200` with `status: modified` and `Contact <EMAIL_ADDRESS>`.
+
+After all three results match, press **Ctrl+C** in Terminal 1 to close the NeMo tunnel.
+
+## 5. Connect the gateway to NeMo
+
+Store NeMo’s address and configuration ID in a `Secret`, then link it to your `MCPGatewayExtension` to enable tool-call checks.
+
+`manifests/05-gateway-secret.yaml`:
+
+~~~yaml
+# Model is a check-request label here; no model is deployed or called by these rails.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: nemo-lab-guardrails
+  namespace: mcp-gateway
+  labels:
+    mcp.kuadrant.io/secret: 'true'
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+type: guardrails/external/nemo
+stringData:
+  config.yaml: |
+    url: http://nemo-lab-checks.mcp-gateway.svc.cluster.local:8000
+    configIDs:
+      - lab-baseline
+    model: guardrails-only
+    failMode: deny
+~~~
+
+<details>
+<summary>Connection settings</summary>
+
+Create the Secret in the same namespace as the `MCPGatewayExtension`, with the required label `mcp.kuadrant.io/secret: 'true'` and type `guardrails/external/nemo`.
+
+The fields under `stringData.config.yaml` configure the connection:
+
+- `url` is the required NeMo Service address used to call `/v1/checks`.
+- `configIDs` selects `lab-baseline`, matching the configuration name in `NemoGuardrails.spec.nemoConfigs`.
+- `model` is required; `guardrails-only` labels these checks, whose rules do not call an LLM.
+- `failMode: deny` rejects calls when NeMo is unavailable, returning HTTP `503` for request checks or a tool error for response checks.
+
+</details>
+
+Apply the Secret and reference it with the `mcp.kuadrant.io/guardrails-ref` annotation:
+
+~~~bash
+oc apply --dry-run=server -f manifests/05-gateway-secret.yaml
+oc apply -f manifests/05-gateway-secret.yaml
+oc annotate mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  mcp.kuadrant.io/guardrails-ref=nemo-lab-guardrails
+oc describe mcpgatewayextension mcp-gateway-extension -n mcp-gateway
+~~~
+
+**Verification:** the extension shows the annotation and `GuardrailsResolved=True`.
+
+## 6. Create the sample contact
+
+Create a ConfigMap with a synthetic email address for the output-masking test.
+
+`manifests/06-synthetic-contact.yaml`:
+
+~~~yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nemo-lab-contact
+  namespace: mcp-exp
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+data:
+  contact: 'Synthetic support contact: alice@example.com'
+~~~
+
+<details>
+<summary>Sample data</summary>
+
+`data.contact` holds the test email in `mcp-exp`, where the MCP server has read access. You’ll compare the masked MCP response with the stored value in step 7.
+
+</details>
+
+~~~bash
+oc apply --dry-run=server -f manifests/06-synthetic-contact.yaml
+oc apply -f manifests/06-synthetic-contact.yaml
+oc get configmap nemo-lab-contact -n mcp-exp -o jsonpath='{.data.contact}{"\n"}'
+~~~
+
+**Verification:** `oc get` prints the contact with `alice@example.com`.
+
+## 7. Test through the gateway
+
+In **Terminal 1**, open a tunnel to the gateway and leave it running:
+
+~~~bash
+oc port-forward service/mcp-gateway-openshift-default -n openshift-ingress 18080:8080
+~~~
+
+Wait for `Forwarding from 127.0.0.1:18080`. Requests to `http://127.0.0.1:18080/mcp` now reach the gateway, which calls NeMo for the checks.
+
+### Open an MCP session
+
+Initialize an [MCP session](https://modelcontextprotocol.io/specification/2025-11-25/basic/lifecycle) and save its ID for the tool calls below.
+
+If your gateway uses authentication, obtain a token through your existing setup. Add `-H "Authorization: Bearer $ACCESS_TOKEN"` to **both** curl commands below, using your token variable's name. The caller needs permission for both lab tools.
+
+In Terminal 2:
+
+~~~bash
+init_response=$(curl --noproxy '*' -sS -i \
+  -H 'Host: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local' \
+  -H 'Accept: application/json, text/event-stream' \
+  -H 'Content-Type: application/json' \
+  --data-binary '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"nemo-curl-lab","version":"1.0"}}}' \
+  http://127.0.0.1:18080/mcp)
+printf '%s\n' "$init_response" | sed -n '1p'
+mcp_session_id=$(printf '%s\n' "$init_response" |
+  awk -F': ' 'tolower($1)=="mcp-session-id" {gsub("\r","",$2); print $2}')
+test -n "$mcp_session_id" && echo 'MCP session ready'
+~~~
+
+**Verification:** HTTP `200` and `MCP session ready`.
+
+Define `mcp_post` to reuse the session headers, then send the initialized notification:
+
+~~~bash
+mcp_post() {
+  curl --noproxy '*' -sS -i \
+    -H 'Host: mcp-gateway-openshift-default.openshift-ingress.svc.cluster.local' \
+    -H 'Accept: application/json, text/event-stream' \
+    -H 'Content-Type: application/json' \
+    -H 'MCP-Protocol-Version: 2025-11-25' \
+    -H "Mcp-Session-Id: $mcp_session_id" \
+    --data-binary "$1" \
+    http://127.0.0.1:18080/mcp
+}
+mcp_post '{"jsonrpc":"2.0","method":"notifications/initialized"}'
+~~~
+
+**Verification:** the notification returns HTTP `202`.
+
+### Allow a normal tool call
+
+Start with the same namespace you used in the direct NeMo check:
+
+~~~bash
+mcp_post '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"openshift_pods_list_in_namespace","arguments":{"namespace":"mcp-exp"}}}'
+~~~
+
+**Expected result:** HTTP `200` with the Pod-list result. NeMo accepts the arguments and the MCP server runs the tool.
+
+### Block the marker before the tool runs
+
+Add the same blocked marker in the tool’s `labelSelector` argument:
+
+~~~bash
+mcp_post '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"openshift_pods_list_in_namespace","arguments":{"namespace":"mcp-exp","labelSelector":"demo=LAB_BLOCK_ME"}}}'
+~~~
+
+**Expected result:** HTTP `403` with `blocked by guardrails`. The gateway rejects the call before the MCP server runs it.
+
+### Mask the returned contact
+
+Read the sample contact through MCP, then read the stored value with `oc`:
+
+~~~bash
+mcp_post '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"openshift_resources_get","arguments":{"apiVersion":"v1","kind":"ConfigMap","name":"nemo-lab-contact","namespace":"mcp-exp"}}}'
+oc get configmap nemo-lab-contact -n mcp-exp -o jsonpath='{.data.contact}{"\n"}'
+~~~
+
+**Expected result:** the MCP response contains `<EMAIL_ADDRESS>`, while `oc get` prints `alice@example.com`. The output rule modifies the returned text; the stored ConfigMap remains unchanged.
+
+## 8. Test in OpenShift Lightspeed
+
+Open **Lightspeed** in the OpenShift console and start a **new conversation for each scenario**.
+
+### Block a matching tool argument
+
+~~~text
+Show the pods in mcp-exp with the label demo=LAB_BLOCK_ME.
+~~~
+
+Expected result: the tool output shows `Status: error`, and Lightspeed reports that it could not fetch the Pods. The gateway blocks the call because the label selector contains `LAB_BLOCK_ME`; Lightspeed may show a generic error instead of the guardrail’s reason.
+
+### Mask the contact before Lightspeed receives it
+
+~~~text
+Show the contact in ConfigMap nemo-lab-contact in mcp-exp.
+~~~
+
+Expected result: Lightspeed shows the contact with the detected email replaced by `<EMAIL_ADDRESS>`, while the stored ConfigMap remains unchanged.
+
+~~~text
+Synthetic support contact: <EMAIL_ADDRESS>
+~~~
+
+## 9. Clean up the experiment
+
+In Terminal 2, remove the guardrails connection:
+
+~~~bash
+oc annotate mcpgatewayextension mcp-gateway-extension -n mcp-gateway \
+  mcp.kuadrant.io/guardrails-ref-
+~~~
+
+Wait for the gateway to pick up the change by retrying the marker call:
+
+~~~bash
+mcp_post '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"openshift_pods_list_in_namespace","arguments":{"namespace":"mcp-exp","labelSelector":"demo=LAB_BLOCK_ME"}}}'
+~~~
+
+**Expected result:** HTTP `200` with a successful tool result; an empty result is valid when no Pods match. If the call still returns `403`, wait a few seconds and retry. Continue only after it succeeds.
+
+Delete the lab resources:
+
+~~~bash
+oc delete -f manifests/05-gateway-secret.yaml --ignore-not-found
+oc delete -f manifests/03-service.yaml --ignore-not-found
+oc delete -f manifests/02-nemo.yaml --ignore-not-found
+oc delete -f manifests/01-rules.yaml --ignore-not-found
+oc delete -f manifests/06-synthetic-contact.yaml --ignore-not-found
+~~~
+
+Verify that the lab objects are gone and the gateway still works:
+
+~~~bash
+oc get -f manifests/ --ignore-not-found
+oc get mcpgatewayextension mcp-gateway-extension -n mcp-gateway
+oc get mcpserverregistration mcp-server-test -n mcp-exp
+mcp_post '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"openshift_pods_list_in_namespace","arguments":{"namespace":"mcp-exp"}}}'
+~~~
+
+**Verification:** no lab objects remain, the extension and registration are Ready, and the Pod-list call succeeds.
+
+Press **Ctrl+C** in Terminal 1 to stop the tunnel, then clear the session in Terminal 2:
+
+~~~bash
+unset init_response mcp_session_id
+unset -f mcp_post
+~~~
+
+## Final thoughts
+
+This lab shows how NeMo Guardrails checks tool-call arguments and results. The input rule blocked calls containing the test marker before they ran, while the output rule masked a detected email before the result reached the client. The data stored in OpenShift stayed unchanged.
+
+Connecting NeMo to MCP Gateway applies the same rules to calls from curl and Lightspeed. You configure the checks in NeMo, and the gateway enforces the verdicts. This lets the assistant use operational data while the configured rules block matching requests and mask detected sensitive information in the results.
+
+## Sources and learn more
+
+- [Understand MCP Gateway guardrails](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5/html-single/secure_your_traffic/index#con-mcp-gateway-understand-guardrails_mcp-gateway-guardrails)
+- [Configure NeMo Guardrails on MCP Gateway](https://docs.redhat.com/en/documentation/red_hat_connectivity_link/1.5/html-single/secure_your_traffic/index#con-mcp-gateway-configure-guardrails_mcp-gateway-guardrails)
+- [MCP Gateway is generally available with Connectivity Link 1.5](https://www.redhat.com/en/blog/model-context-protocol-gateway-red-hat-openshift-now-generally-available)
+- [NeMo Guardrails custom resource configuration reference](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/enabling_ai_safety_with_guardrails/enabling-ai-safety-with-nemo-guardrails_nemo-guardrails#nemo-guardrails-custom-resource-configuration-reference_nemo-guardrails)
+- [NeMo Guardrails built-in flows reference](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/enabling_ai_safety_with_guardrails/enabling-ai-safety-with-nemo-guardrails_nemo-guardrails#nemo-guardrails-library-flows-reference_nemo-guardrails)
+- [Mask personal information instead of blocking](https://docs.redhat.com/en/documentation/red_hat_openshift_ai_self-managed/3.5/html/enabling_ai_safety_with_guardrails/enabling-ai-safety-with-nemo-guardrails_nemo-guardrails#masking_pii_instead_of_blocking)
+- [Configure a custom MCP server in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed#ols-enabling-mcp-server_ols-configuring-openshift-lightspeed)
+- [Disable built-in cluster interaction in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed#disabling-cluster-interaction_ols-configuring-openshift-lightspeed)
+- [OpenShift MCP server: Pod-list tool and its label selector argument](https://github.com/openshift/openshift-mcp-server/blob/c5d3fa30bef36ba8b0c9001ea4b2349227a2b41d/pkg/toolsets/core/pods.go#L44-L76)
+
+*Last updated: 2026-10-30*

@@ -816,6 +816,11 @@ pre {
   background: var(--ink);
 }
 
+/* Keep GitHub Dark comments readable against the code-block background. */
+pre.astro-code.github-dark span[style*="color:#6A737D" i] {
+  color: #9da5b4 !important;
+}
+
 .article-table {
   width: 100%;
   max-width: 100%;

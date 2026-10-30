@@ -58,12 +58,12 @@ const hasContents = Astro.slots.has('contents');
     <a class="skip-link" href="#main">Skip to content</a>
     <Header />
     <div class:list={['docs-layout', { 'docs-layout--with-contents': hasContents }]}>
-      <aside class="docs-sidebar">
+      <aside class="docs-sidebar" aria-label="Site navigation">
         <SiteNav />
       </aside>
       <main id="main" class="docs-content" tabindex="-1"><slot /></main>
       {hasContents && (
-        <aside class="docs-contents">
+        <aside class="docs-contents" aria-label="Article contents">
           <slot name="contents" />
         </aside>
       )}

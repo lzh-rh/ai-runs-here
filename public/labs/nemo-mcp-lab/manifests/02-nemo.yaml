@@ -1,0 +1,16 @@
+# Operator-managed HTTPS access remains authenticated.
+apiVersion: trustyai.opendatahub.io/v1alpha1
+kind: NemoGuardrails
+metadata:
+  name: nemo-lab
+  namespace: mcp-gateway
+  labels:
+    app.kubernetes.io/part-of: rhcl15-nemo-lab
+  annotations:
+    security.opendatahub.io/enable-auth: 'true'
+spec:
+  replicas: 1
+  nemoConfigs:
+    - name: lab-baseline
+      configMaps: [nemo-lab-baseline]
+      default: true

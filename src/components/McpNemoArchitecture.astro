@@ -1,0 +1,201 @@
+---
+interface Props {
+  client?: 'terminal' | 'lightspeed' | 'both';
+  showSetup?: boolean;
+}
+
+const { client = 'terminal', showSetup = true } = Astro.props;
+const usesLightspeed = client === 'lightspeed';
+const usesBoth = client === 'both';
+---
+
+<figure class="nemo-flow" aria-labelledby="nemo-flow-title" aria-describedby="nemo-flow-description">
+  <figcaption id="nemo-flow-title">Where NeMo checks a tool call</figcaption>
+  <p id="nemo-flow-description" class="nemo-flow__intro">Follow the request from {usesBoth ? 'curl or Lightspeed' : usesLightspeed ? 'Lightspeed' : 'your terminal'} to OpenShift, then follow the result back.</p>
+
+  <ol class="nemo-flow__steps" role="list">
+    <li>
+      <span class="nemo-flow__number" aria-hidden="true">1</span>
+      <div class="nemo-flow__step">
+        <span class="nemo-flow__label">Send the request</span>
+        <div class="nemo-flow__path">
+          <span class="nemo-flow__node">{usesBoth ? 'curl or OpenShift Lightspeed' : usesLightspeed ? 'OpenShift Lightspeed' : 'Your terminal'} <small>{usesBoth ? 'Same gateway, same rules' : usesLightspeed ? 'Tool call chosen by its model' : 'curl client'}</small></span>
+          <span class="nemo-flow__arrow" aria-hidden="true">→</span>
+          <span class="nemo-flow__node nemo-flow__node--gateway">MCP Gateway <small><code>POST /mcp</code></small></span>
+        </div>
+        <p>{usesBoth ? "You specify the tool call in curl, or Lightspeed’s model selects it from your chat request. Both clients send it to Envoy, the gateway’s proxy." : usesLightspeed ? "Lightspeed sends the tool call to Envoy, the gateway's proxy." : "Your curl request reaches Envoy, the gateway's proxy."} The MCP router extracts the tool name and arguments.</p>
+      </div>
+    </li>
+    <li>
+      <span class="nemo-flow__number" aria-hidden="true">2</span>
+      <div class="nemo-flow__step">
+        <span class="nemo-flow__label">Check the input</span>
+        <div class="nemo-flow__path">
+          <span class="nemo-flow__node nemo-flow__node--gateway">MCP router</span>
+          <span class="nemo-flow__arrow" aria-hidden="true">→</span>
+          <span class="nemo-flow__node">Checks Service <small><code>nemo-lab-checks:8000</code></small></span>
+          <span class="nemo-flow__arrow" aria-hidden="true">→</span>
+          <span class="nemo-flow__node nemo-flow__node--nemo">NeMo <small><code>/v1/checks</code></small></span>
+        </div>
+        <p>The router sends the arguments to NeMo, which checks them against your input rule and returns a verdict.</p>
+        <div class="nemo-flow__verdicts">
+          <span><b class="nemo-flow__blocked">Blocked</b> The gateway returns 403 before the tool runs.</span>
+          <span><b class="nemo-flow__passed">Passed</b> Continue to step 3.</span>
+        </div>
+      </div>
+    </li>
+    <li>
+      <span class="nemo-flow__number" aria-hidden="true">3</span>
+      <div class="nemo-flow__step">
+        <span class="nemo-flow__label">Run the tool</span>
+        <div class="nemo-flow__path">
+          <span class="nemo-flow__node nemo-flow__node--gateway">Envoy proxy</span>
+          <span class="nemo-flow__arrow" aria-hidden="true">→</span>
+          <span class="nemo-flow__node">OpenShift MCP server</span>
+          <span class="nemo-flow__arrow" aria-hidden="true">→</span>
+          <span class="nemo-flow__node">OpenShift API</span>
+        </div>
+        <p>In the masking test, the MCP server reads <code>ConfigMap/nemo-lab-contact</code> from the <code>mcp-exp</code> namespace. The result goes back through the gateway.</p>
+      </div>
+    </li>
+    <li>
+      <span class="nemo-flow__number" aria-hidden="true">4</span>
+      <div class="nemo-flow__step">
+        <span class="nemo-flow__label">Check the output and return it</span>
+        <div class="nemo-flow__path">
+          <span class="nemo-flow__node nemo-flow__node--gateway">MCP router</span>
+          <span class="nemo-flow__arrow" aria-hidden="true">↔</span>
+          <span class="nemo-flow__node nemo-flow__node--nemo">Same NeMo service <small>Output masking rule</small></span>
+        </div>
+        <p>The router sends the result text to NeMo through the same checks Service. NeMo masks the email, and the gateway returns the changed text to {usesBoth ? 'curl, or to Lightspeed for its model to use in the answer' : usesLightspeed ? 'Lightspeed for its model to use in the answer' : 'your terminal'}.</p>
+        <div class="nemo-flow__result"><code>alice@example.com</code><span aria-label="is replaced with">→</span><code>&lt;EMAIL_ADDRESS&gt;</code></div>
+        <p>OpenShift still stores <code>alice@example.com</code> in the ConfigMap.</p>
+      </div>
+    </li>
+  </ol>
+
+  {showSetup && <details class="nemo-flow__setup">
+    <summary>See how the YAML connects these components</summary>
+    <p>You apply these files to tell OpenShift what to run and how to connect it. The Operators and controllers handle the setup.</p>
+    <dl>
+      <div>
+        <dt>Rules → NeMo pod</dt>
+        <dd>You save the rules with <code>01-rules.yaml</code>, then reference that ConfigMap in <code>02-nemo.yaml</code> under the ID <code>lab-baseline</code>. The TrustyAI Operator starts NeMo and mounts the files in its pod.</dd>
+      </div>
+      <div>
+        <dt>Service → NeMo pod</dt>
+        <dd>With <code>03-service.yaml</code>, you give the gateway a fixed address for NeMo. The Service forwards connections to pods labeled <code>app: nemo-lab</code>.</dd>
+      </div>
+      <div>
+        <dt>Gateway extension → Secret → router settings</dt>
+        <dd>You store NeMo's address and the <code>lab-baseline</code> ID in <code>05-gateway-secret.yaml</code>. The extension annotation names that Secret so the MCP gateway controller can configure the router with those settings.</dd>
+      </div>
+      <div>
+        <dt>Test data → OpenShift API</dt>
+        <dd>You create the sample contact in <code>mcp-exp</code> with <code>06-synthetic-contact.yaml</code>. The MCP server uses its existing OpenShift permissions to read it.</dd>
+      </div>
+    </dl>
+    <p class="nemo-flow__setup-note">The MCP broker handles session initialization and tool discovery. This diagram follows a tool call.</p>
+  </details>}
+</figure>
+
+<style>
+  .nemo-flow {
+    margin: 1.75rem 0;
+    padding: clamp(1rem, 3vw, 1.75rem);
+    border: 1px solid var(--rule);
+    border-radius: 0.8rem;
+    background: var(--paper);
+    color: var(--ink);
+    container-type: inline-size;
+  }
+  .nemo-flow figcaption {
+    margin: 0;
+    max-width: none;
+    color: var(--ink);
+    font: 700 clamp(1.15rem, 3vw, 1.5rem) / 1.3 var(--font-heading);
+  }
+  .nemo-flow .nemo-flow__intro {
+    margin: 0.6rem 0 1.5rem;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+  .nemo-flow code {
+    padding: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 0.82em;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .nemo-flow__steps { list-style: none; padding: 0; margin: 0; }
+  .nemo-flow__steps > li {
+    display: grid;
+    grid-template-columns: 1.8rem minmax(0, 1fr);
+    gap: 0.8rem;
+    position: relative;
+    margin: 0;
+    padding-bottom: 1.5rem;
+  }
+  .nemo-flow__steps > li:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 0.85rem;
+    top: 2.1rem;
+    bottom: 0.3rem;
+    border-left: 1px solid #bbbfc5;
+  }
+  .nemo-flow__number {
+    display: grid;
+    place-items: center;
+    width: 1.8rem;
+    height: 1.8rem;
+    border-radius: 50%;
+    background: var(--ink);
+    color: var(--paper);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .nemo-flow__label { display: block; margin: 0.1rem 0 0.55rem; font-size: 0.9rem; font-weight: 700; }
+  .nemo-flow__path { display: flex; align-items: stretch; gap: 0.45rem; }
+  .nemo-flow__node {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 0.65rem 0.75rem;
+    border: 1px solid #d7dade;
+    border-radius: 0.4rem;
+    background: #f5f6f7;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.35;
+  }
+  .nemo-flow__node small { display: block; margin-top: 0.25rem; font-size: 0.8rem; font-weight: 400; }
+  .nemo-flow__node--gateway { background: #edf3fb; border-color: #c6d8ee; color: #173f6c; }
+  .nemo-flow__node--nemo { background: #f1eef8; border-color: #d6cdea; color: #4b326f; }
+  .nemo-flow__arrow { align-self: center; flex: 0 0 auto; font-size: 1.1rem; color: var(--muted); }
+  .nemo-flow .nemo-flow__step > p { margin: 0.6rem 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.5; }
+  .nemo-flow__verdicts { display: grid; gap: 0.4rem; margin-top: 0.6rem; font-size: 0.82rem; }
+  .nemo-flow__verdicts b { display: inline-block; margin-right: 0.35rem; }
+  .nemo-flow__blocked { color: #a60000; }
+  .nemo-flow__passed { color: #235c35; }
+  .nemo-flow__result { display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; margin-top: 0.6rem; padding: 0.6rem 0.75rem; background: #f1eef8; border-radius: 0.4rem; color: #4b326f; }
+  .nemo-flow__setup { padding-top: 1rem; border-top: 1px dashed var(--rule); }
+  .nemo-flow__setup summary { cursor: pointer; font-size: 0.95rem; font-weight: 700; color: #173f6c; }
+  .nemo-flow__setup p, .nemo-flow__setup dd { font-size: 0.88rem; line-height: 1.55; }
+  .nemo-flow__setup p { margin: 0.75rem 0; }
+  .nemo-flow__setup dl { margin: 1rem 0; display: grid; gap: 1rem; }
+  .nemo-flow__setup dt { margin-bottom: 0.3rem; font-size: 0.9rem; font-weight: 700; }
+  .nemo-flow__setup dd { margin: 0; color: var(--muted); }
+  .nemo-flow .nemo-flow__setup-note { margin-bottom: 0; color: var(--muted); }
+  @container (max-width: 30rem) {
+    .nemo-flow__steps > li { grid-template-columns: 1.6rem minmax(0, 1fr); gap: 0.6rem; }
+    .nemo-flow__number { width: 1.6rem; height: 1.6rem; }
+    .nemo-flow__steps > li:not(:last-child)::before { left: 0.75rem; }
+    .nemo-flow__path { flex-direction: column; gap: 0.3rem; }
+    .nemo-flow__arrow { transform: rotate(90deg); line-height: 1; }
+    .nemo-flow__node { flex-basis: auto; }
+  }
+</style>
