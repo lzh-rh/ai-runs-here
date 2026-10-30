@@ -2,8 +2,8 @@
 kind: lab
 title: "Integrate MCP Gateway with OpenShift Lightspeed: a beginner lab"
 description: Build a read-only path from OpenShift Lightspeed through MCP Gateway to the OpenShift API, with a checkpoint at every boundary.
-publishedDate: 2026-09-25
-updatedDate: 2026-10-29
+publishedDate: 2026-10-30
+updatedDate: 2026-10-30
 topic: mcp-gateway
 tags:
   - OpenShift
@@ -41,8 +41,6 @@ In this lab, you will connect OpenShift Lightspeed to MCP Gateway and list Pods 
 
 If you want to see what happens inside the Gateway when Lightspeed lists or calls a tool, read [Understanding MCP Gateway and its request paths](https://lzh-rh.github.io/ai-runs-here/articles/how-mcp-gateway-works/).
 
-You will deploy the MCP server, check its readiness, and test a tool call through the Gateway before connecting Lightspeed. These checkpoints help you locate a problem before adding the next component.
-
 ## What you will learn
 
 - How to deploy a read-only OpenShift MCP server.
@@ -53,6 +51,8 @@ You will deploy the MCP server, check its readiness, and test a tool call throug
 ## Before you begin
 
 Log in to your learning cluster as an administrator in the web console and `oc`. Start with working Lightspeed chat; see [Understanding OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/understanding-openshift-lightspeed/) if you need setup guidance.
+
+Use non-sensitive data and keep this lab's Gateway internal: the configuration does not require clients to authenticate to the Gateway. If a component is already installed, check that it is ready instead of reinstalling it.
 
 ## 1. Prepare OpenShift AI
 
@@ -72,7 +72,7 @@ In the OpenShift web console:
   caption="Open the Red Hat-provided Operator. The exact available maintenance version can change after this screenshot."
 />
 
-Select the `stable-3.x` channel, version `3.5.0`, all namespaces, and the recommended `redhat-ods-operator` namespace. Follow your organization's update-approval policy.
+Select the `stable-3.x` channel, an available `3.5` maintenance release, all namespaces, and the recommended `redhat-ods-operator` namespace. The screenshots show `3.5.0`; your catalog may offer a newer maintenance release. Follow your organization's update-approval policy.
 
 <ArticleImage
   src="/images/mcp-gateway-ols/02-rhoai-install-settings.png"
@@ -222,7 +222,7 @@ Checkpoint: confirm that `mcp-exp` appears in the OpenShift AI project list. The
 
 Give the MCP server a Kubernetes ServiceAccount, the identity its Pod will use to call the OpenShift API, and configure it for read-only tools.
 
-### Create its ServiceAccount and guardrails
+### Create its ServiceAccount and configuration
 
 Use `vi` to save your first YAML file:
 
@@ -337,6 +337,8 @@ Check the server and its generated resources:
 ```bash
 oc get mcpserver mcp-server-test -n mcp-exp
 oc get deployment,service,pod -n mcp-exp
+oc wait mcpserver/mcp-server-test -n mcp-exp \
+  --for=condition=Ready --timeout=5m
 ```
 
 Continue when the `MCPServer` reports `Ready=True` and its pod is running. Do not edit the generated Deployment; change the `MCPServer` or its ConfigMap instead.
@@ -409,9 +411,15 @@ oc get csv -n openshift-operators | grep rhcl-operator
 
 ### Create the Connectivity Link instance
 
-The Operator needs a `Kuadrant` resource to configure the Connectivity Link components. In **Installed Operators > Red Hat Connectivity Link**, open the **Kuadrant** tab and click **Create Kuadrant**. Switch to **YAML view**, paste the following content, and click **Create**.
+The Operator needs a `Kuadrant` resource to configure the Connectivity Link components. First, check for an existing instance:
 
-If a `Kuadrant` instance already exists, keep it and check its readiness instead of creating another one.
+```bash
+oc get kuadrant -A
+```
+
+If an instance already exists, keep it and check its readiness instead of creating another one. Use its name and namespace in the readiness commands below.
+
+If none exists, open **Installed Operators > Red Hat Connectivity Link > Kuadrant** and click **Create Kuadrant**. Switch to **YAML view**, paste the following content, and click **Create**.
 
 ```yaml
 apiVersion: kuadrant.io/v1beta1
@@ -429,7 +437,7 @@ oc apply --dry-run=server -f 02-kuadrant.yaml
 oc apply -f 02-kuadrant.yaml
 ```
 
-Check readiness. If you reused an existing instance with a different name, replace `kuadrant` in the first command with its name:
+Check readiness. These commands use the name and namespace from the YAML above:
 
 ```bash
 oc wait kuadrant/kuadrant -n openshift-operators \
@@ -686,9 +694,11 @@ curl --noproxy '*' -sS \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"gateway-lab","version":"1.0"}}}'
 
-export MCP_SESSION_ID="$(awk 'BEGIN{IGNORECASE=1} /^mcp-session-id:/ {gsub("\r", "", $2); print $2}' /tmp/mcp-initialize.headers)"
+export MCP_SESSION_ID="$(awk 'tolower($1) == "mcp-session-id:" {gsub("\r", "", $2); print $2}' /tmp/mcp-initialize.headers)"
 test -n "${MCP_SESSION_ID}" && printf 'MCP session initialized.\n'
 ```
+
+The Gateway returns a session ID in an HTTP response header. The `awk` command reads it regardless of capitalization and saves it for the following requests. If you do not see `MCP session initialized.`, inspect `/tmp/mcp-initialize.body` and stop before continuing.
 
 Tell the server that initialization is complete:
 
@@ -805,10 +815,7 @@ Use openshift_pods_list_in_namespace to list pods in mcp-exp. Do not create, upd
 
 Approve only a read-only tool whose name and arguments match the request.
 
-The final checkpoint needs two pieces of evidence:
-
-- the protocol test returned one or more `openshift_` tools through MCP Gateway;
-- OpenShift Lightspeed called an `openshift_` tool and returned pod data from `mcp-exp`.
+Checkpoint: confirm that Lightspeed called `openshift_pods_list_in_namespace` and returned Pod data from `mcp-exp`. Compare the result with `oc get pods -n mcp-exp`.
 
 ### Optional: use only the Gateway path
 
@@ -832,9 +839,7 @@ Keep the custom `spec.mcpServers` entry that points to MCP Gateway.
 
 You have tested tool discovery and a read-only Pod query through MCP Gateway, then used the same connection from Lightspeed. You can extend this setup by registering another MCP server behind the Gateway while keeping one URL in Lightspeed.
 
-To understand how these components work together, read [Understanding MCP Gateway and its request paths](https://lzh-rh.github.io/ai-runs-here/articles/how-mcp-gateway-works/). It traces `tools/list` and `tools/call` through Envoy, the router, the broker, and the backend MCP server.
-
-In future articles, we will experiment with authentication, tool-level authorization, rate limiting, and observability, and explain how each feature works.
+The linked authentication and authorization lab covers the next step: controlling who can use the Gateway and which tools they can call. In future articles, we will experiment with rate limiting and observability and explain how each feature works.
 
 ## Sources and learn more
 
@@ -849,6 +854,4 @@ In future articles, we will experiment with authentication, tool-level authoriza
 - [Configure a custom MCP server in OpenShift Lightspeed](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed)
 - [Model Context Protocol architecture](https://modelcontextprotocol.io/specification/2025-11-25/architecture)
 
-*Sources checked: 2026-10-23. Connectivity Link installation rechecked: 2026-10-29.*
-
-*Last updated: 2026-10-29*
+*Last updated: 2026-10-30*
