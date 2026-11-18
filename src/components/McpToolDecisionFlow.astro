@@ -1,0 +1,101 @@
+<figure class="tool-decision-flow" aria-labelledby="tool-decision-title" aria-describedby="tool-decision-description">
+  <figcaption id="tool-decision-title">From a request to a cluster action</figcaption>
+  <p id="tool-decision-description" class="tool-decision-flow__intro">
+    Each step answers a different question before OpenShift can change a workload.
+  </p>
+
+  <ol class="tool-decision-flow__steps" role="list" aria-label="Three checks for an MCP tool call">
+    <li class="tool-decision-flow__step">
+      <strong>1. OpenShift MCP server</strong>
+      <small>Is the tool offered to Lightspeed?</small>
+      <span aria-hidden="true">↓</span>
+    </li>
+    <li class="tool-decision-flow__step tool-decision-flow__step--approval">
+      <strong>2. OpenShift Lightspeed</strong>
+      <small>Does this offered tool call need human approval?</small>
+      <span aria-hidden="true">↓</span>
+    </li>
+    <li class="tool-decision-flow__step tool-decision-flow__step--rbac">
+      <strong>3. OpenShift API</strong>
+      <small>Does the calling identity have RBAC permission?</small>
+    </li>
+  </ol>
+</figure>
+
+<style>
+  .tool-decision-flow {
+    margin: 2rem 0;
+    padding: clamp(1rem, 3vw, 1.6rem);
+    border: 1px solid var(--rule);
+    border-top: 5px solid var(--rh-red);
+    border-radius: 0.75rem;
+    background: var(--paper);
+  }
+
+  figcaption {
+    color: var(--ink);
+    font-family: var(--font-heading);
+    font-size: clamp(1.35rem, 3vw, 1.8rem);
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .tool-decision-flow__intro {
+    margin: 0.55rem 0 1.25rem;
+    color: var(--muted);
+  }
+
+  .tool-decision-flow__steps {
+    display: grid;
+    gap: 1.8rem;
+    max-width: 32rem;
+    margin: 0 auto;
+    padding: 0;
+    list-style: none;
+  }
+
+  .tool-decision-flow__step {
+    position: relative;
+    display: grid;
+    gap: 0.25rem;
+    min-width: 0;
+    margin: 0;
+    padding: 0.8rem 1rem;
+    border: 1px solid var(--link);
+    border-radius: 0.55rem;
+    background: var(--blue-soft);
+    text-align: center;
+  }
+
+  .tool-decision-flow__step--approval {
+    border: 2px solid var(--rh-red-dark);
+    background: var(--paper);
+  }
+
+  .tool-decision-flow__step--rbac {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+  }
+
+  .tool-decision-flow__step strong {
+    color: var(--ink);
+    font-size: 1.05rem;
+  }
+
+  .tool-decision-flow__step small {
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+
+  .tool-decision-flow__step span {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    height: 1.8rem;
+    transform: translateX(-50%);
+    color: var(--rh-red-dark);
+    font-size: 1.4rem;
+    line-height: 1.8rem;
+  }
+</style>

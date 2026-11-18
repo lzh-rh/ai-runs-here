@@ -1,0 +1,255 @@
+---
+kind: guide
+title: "OpenShift MCP tools, approvals, and RBAC: a beginner's guide"
+description: See how tool hints, server settings, Lightspeed approvals, and RBAC affect a request to change an OpenShift application.
+publishedDate: 2026-11-18
+updatedDate: 2026-11-18
+topic: mcp-server
+tags:
+  - OpenShift
+  - OpenShift Lightspeed
+  - Model Context Protocol
+  - MCP server
+  - RBAC
+difficulty: beginner
+estimatedMinutes: 11
+timeEstimateType: reading
+tocDepth: 2
+showTestedVersions: false
+testedVersions: []
+prerequisites: []
+draft: false
+featured: false
+---
+
+import McpToolDecisionFlow from '../../components/McpToolDecisionFlow.astro';
+
+You ask OpenShift Lightspeed to show you an application. Then you ask it to run more copies of that application. The first request might proceed without a prompt, while the second asks for approval. Even after you approve, OpenShift might refuse the change.
+
+To understand why, we need to separate three decisions: **which tools the MCP server offers, when Lightspeed asks for approval, and what OpenShift allows the caller to do.**
+
+We'll use a Deployment named `web` in a namespace named `shop`. A Deployment manages running copies of an application, called *replicas*. A namespace groups resources within a cluster. Our example request is: **“Scale the `web` Deployment in `shop` to three replicas.”**
+
+## 1. Start with tools and their hints
+
+The **Model Context Protocol (MCP)** gives an AI application a way to discover and call tools. A tool is a named operation. Lightspeed calls tools through the OpenShift MCP server to work with your cluster. For example, `resources_get` reads a resource, while `resources_scale` reads or changes its replica count.
+
+The server organizes related tools into **toolsets**. The `core` toolset contains the Pod and resource tools we'll use here. An administrator chooses which toolsets to enable; enabling a toolset makes its tools candidates for use, subject to the server's filters.
+
+Each tool can also carry **annotations**, or hints, that describe its behavior. Two matter for this explanation:
+
+- **`readOnlyHint: true`** means the tool declares that it does not change its environment.
+- **`destructiveHint: true`** means a tool that can write may make destructive changes. A value of `false` describes additive changes, such as creating something new. This hint matters for tools that are not read-only.
+
+The word *destructive* includes more than deletion. Changing existing state, such as reducing an application's replica count, can also be disruptive.
+
+These are the annotations in four real OpenShift MCP tool definitions:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Four OpenShift MCP tools and their annotations">
+
+| Tool | Example use | Declared hints |
+| --- | --- | --- |
+| `resources_get` | Read the `web` Deployment. | `readOnlyHint: true`; `destructiveHint: false` |
+| `pods_run` | Create a test Pod, which runs one or more containers. | No explicit `readOnlyHint`; `destructiveHint: false` |
+| `resources_scale` | Change `web` to three replicas. | No explicit `readOnlyHint`; `destructiveHint: true` |
+| `resources_delete` | Delete the test Pod. | No explicit `readOnlyHint`; `destructiveHint: true` |
+
+</div>
+
+**A missing hint does not mean read-only.** MCP's default for a missing `readOnlyHint` is `false`. Creating a Pod changes the cluster even though `pods_run` has `destructiveHint: false`.
+
+Hints describe the tool's capabilities. They do not grant permission or guarantee that a tool is safe.
+
+## 2. Choose which tools the MCP server offers
+
+The OpenShift MCP server has two settings that filter its tool list:
+
+- **`read_only = true`** keeps only tools that declare `readOnlyHint: true`.
+- **`disable_destructive = true`** removes tools that declare `destructiveHint: true`.
+
+Setting either option to `false` turns off that filter. Pay attention to the second name: **`disable_destructive`**. Setting it to `true` disables destructive tools; setting it to `false` leaves them available unless another filter removes them.
+
+**Both settings default to `false` in the upstream server configuration:**
+
+```toml
+read_only = false
+disable_destructive = false
+```
+
+With those defaults, neither filter removes tools. A deployment chart, Operator, or administrator can supply different values, so check your server's configuration before assuming it uses these defaults.
+
+An administrator can store these settings in a **ConfigMap**, a Kubernetes object that holds configuration data. For this server, the ConfigMap can contain a file named `config.toml`:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mcp-server-config
+  namespace: mcp
+data:
+  config.toml: |
+    toolsets = ["core", "config"]
+    read_only = false
+    disable_destructive = true
+```
+
+This example overrides the destructive filter's default by setting `disable_destructive = true`. A server deployment must mount and read the file for the settings to take effect. The `core` toolset supplies our example tools; `config` supplies configuration-related tools.
+
+### The four combinations
+
+The table applies these two filters to the four tools above. Assume their toolset is enabled and no other filter removes them. “Available” means Lightspeed can discover the tool; approval and permission checks still come later.
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Four combinations of MCP server filters with concrete examples">
+
+| Server settings | Result for our examples |
+| --- | --- |
+| `read_only = false`<br />`disable_destructive = false` | Read `web`, create a test Pod, scale `web`, or delete the test Pod: all four tools remain available. |
+| `read_only = false`<br />`disable_destructive = true` | Read `web` or create a test Pod: available. Scale `web` or delete the test Pod: those tools are removed. |
+| `read_only = true`<br />`disable_destructive = false` | Read `web`: available. Create, scale, or delete: those tools are removed. |
+| `read_only = true`<br />`disable_destructive = true` | Read `web`: available. Create, scale, or delete: those tools are removed. |
+
+</div>
+
+The second row often causes confusion. **Disabling destructive tools still allows some writes.** It leaves `pods_run` available because that tool declares `destructiveHint: false`.
+
+The last two rows have the same result. Once `read_only = true` keeps only tools labeled read-only, the destructive filter adds no further restriction.
+
+For our scale request, `resources_scale` remains available only in the first row. Changing the Lightspeed approval type cannot bring back a tool that the MCP server has removed.
+
+## 3. Decide when Lightspeed asks for approval
+
+After the MCP server offers a tool, Lightspeed's **approval type** determines whether to ask you before calling it. The setting is named `approvalType` within `toolsApprovalConfig`.
+
+In your existing `OLSConfig`, place it under `spec.ols` as shown below.
+
+```yaml
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+spec:
+  ols:
+    toolsApprovalConfig:
+      approvalType: tool_annotations
+```
+
+The `approvalType` setting supports three options:
+
+<div className="article-table" tabIndex={0} role="region" aria-label="Lightspeed approval types and examples">
+
+| Approval type | Rule | Example |
+| --- | --- | --- |
+| `never` | Do not ask for Lightspeed approval. | Neither reading nor scaling `web` requires this approval. |
+| `always` | Ask before each tool call, including reads. | Both reading and scaling `web` require approval. |
+| `tool_annotations` | Skip approval only when the tool declares `readOnlyHint: true`. Ask for other tools. | Reading `web` with `resources_get` skips approval. Scaling it with `resources_scale` requires approval. |
+
+</div>
+
+Red Hat documents `tool_annotations` as the default. In the Lightspeed approval implementation checked for this guide, this mode examines **`readOnlyHint`**, not `destructiveHint`.
+
+That explains another common surprise: **`pods_run` still requires approval under `tool_annotations`, even though its `destructiveHint` is `false`.** It creates a Pod and does not declare `readOnlyHint: true`.
+
+Approval applies to a tool call. If Lightspeed reads `web` and then proposes scaling it, those are separate calls with separate approval decisions. Selecting `never` skips this approval step; OpenShift still checks permission.
+
+## 4. Let OpenShift check permission with RBAC
+
+**Role-based access control (RBAC)** determines which actions an identity may perform on cluster resources. An identity can represent a person or a **ServiceAccount**, which software uses to authenticate to Kubernetes.
+
+An administrator defines permissions in a Role or ClusterRole and assigns them through a binding. For example, an identity might have permission to read Deployments in `shop` but lack permission to scale them.
+
+OpenShift checks the identity used by the MCP server for the cluster request. Depending on the server's configuration, that may be the user's forwarded credentials or credentials configured for the server. Do not assume it is the person who clicked Approve.
+
+Suppose `resources_scale` is available and you approve its call. If the calling identity lacks permission to update the Deployment's scale, OpenShift refuses that update. Approval does not add an RBAC permission.
+
+The same principle applies to reading: `resources_get` can be available and skip approval, yet OpenShift can deny access to the requested object.
+
+<details id="optional-configure-rbac-for-the-mcp-server">
+<summary><strong>Optional: configure RBAC for the MCP server</strong></summary>
+
+Let's give the MCP server permission to read Deployments in `shop`. We will create a **Role** that describes the allowed actions and a **RoleBinding** that assigns those permissions to its ServiceAccount.
+
+### 1. Confirm which identity needs permission
+
+This example assumes your MCP server uses **ServiceAccount `mcp-viewer` in namespace `mcp`** for cluster requests and that `shop` already exists. Run the following commands as an administrator authorized to manage RBAC in `shop`.
+
+### 2. Create the permissions and assign them
+
+Create a Role that allows reading one Deployment (`get`) or listing Deployments (`list`) in `shop`:
+
+```bash
+oc create role mcp-deployment-reader \
+  --verb=get,list \
+  --resource=deployments.apps \
+  -n shop
+```
+
+Assign that Role to the existing ServiceAccount:
+
+```bash
+oc create rolebinding mcp-read-deployments \
+  --role=mcp-deployment-reader \
+  --serviceaccount=mcp:mcp-viewer \
+  -n shop
+```
+
+The two namespaces have different jobs. **`mcp` identifies where the ServiceAccount lives; `shop` identifies where it gets access.** This Role grants no permission to create, delete, or scale Deployments.
+
+### 3. Check the result
+
+Use `oc auth can-i` to ask OpenShift about the ServiceAccount's permissions. The `--as` option checks another identity, so the person running these checks needs permission to impersonate that ServiceAccount.
+
+```bash
+oc auth can-i get deployments.apps/web \
+  --as=system:serviceaccount:mcp:mcp-viewer \
+  -n shop
+
+oc auth can-i update deployments.apps/web --subresource=scale \
+  --as=system:serviceaccount:mcp:mcp-viewer \
+  -n shop
+```
+
+With only this Role granting Deployment access, the expected answers are **`yes` for reading** and **`no` for scaling**. These checks do not read or change `web`; they check authorization. Other RoleBindings or ClusterRoleBindings can grant more access, so investigate those if the second check returns `yes`.
+
+This Role supplies the read permission needed for `resources_get` on `shop/web`. Approving `resources_scale` still cannot supply the missing scale permission.
+
+</details>
+
+## 5. Put the decisions together
+
+Return to the request: **“Scale `web` in `shop` to three replicas.”** Suppose the server uses `read_only = false` and `disable_destructive = false`, and Lightspeed uses `tool_annotations`.
+
+<McpToolDecisionFlow />
+
+The MCP server leaves `resources_scale` available. Lightspeed asks for approval because the tool does not declare `readOnlyHint: true`. After you approve, the MCP server attempts the operation using its configured cluster identity.
+
+If that identity lacks the required scale permission, OpenShift denies the operation. If it has permission, the operation passes the RBAC check and can proceed. Other cluster checks or runtime errors can still affect the result.
+
+Now change one setting at a time:
+
+- Set **`disable_destructive = true`**: the MCP server removes `resources_scale`, so this tool cannot reach the approval step.
+- Set **`read_only = true`**: the server also removes `resources_scale`, regardless of the destructive setting.
+- Keep both filters `false`, but set approval to **`never`**: Lightspeed skips the prompt, while the RBAC requirement stays the same.
+
+When a request does not work, check these in order: **tool availability, Lightspeed approval, then cluster permission.** That tells you which configuration to investigate without changing settings that cannot solve the problem.
+
+## Final thoughts
+
+The MCP server decides which tools are available. Lightspeed decides when to ask for approval. OpenShift RBAC checks whether the calling identity has permission. Keeping these responsibilities separate helps you understand why a tool is missing, a call waits for approval, or an approved action fails.
+
+Use the four configuration combinations as a reference when choosing which tools to offer. If you try the optional RBAC example, start with read access in one namespace and check the ServiceAccount's permissions before adding more actions.
+
+## Sources and learn more
+
+- [MCP tool annotations specification](https://modelcontextprotocol.io/specification/2025-11-25/schema#toolannotations)
+- [OpenShift MCP server configuration reference](https://github.com/openshift/openshift-mcp-server/blob/main/docs/configuration.md)
+- [Core resource tool definitions](https://github.com/openshift/openshift-mcp-server/blob/main/pkg/toolsets/core/resources.go)
+- [Pod tool definitions](https://github.com/openshift/openshift-mcp-server/blob/main/pkg/toolsets/core/pods.go)
+- [Red Hat Lightspeed approval configuration](https://docs.redhat.com/en/documentation/red_hat_openshift_lightspeed/1.0/html/configure/ols-configuring-openshift-lightspeed#_tools_approval_configuration)
+- [OpenShift Lightspeed OLSConfig API definition](https://github.com/openshift/lightspeed-operator/blob/main/api/v1alpha1/olsconfig_types.go)
+- [Lightspeed approval implementation](https://github.com/openshift/lightspeed-service/blob/b0e92081cb60af0ff9848ebf8c85af8137399dc4/ols/src/tools/approval.py)
+- [Kubernetes RBAC documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/)
+- [OpenShift MCP server Kubernetes setup guide](https://github.com/openshift/openshift-mcp-server/blob/main/docs/getting-started-kubernetes.md)
+- [OpenShift CLI reference](https://docs.redhat.com/en/documentation/openshift_container_platform/4.22/html/cli_tools/openshift-cli-oc)
+- [Connect MCP Gateway to OpenShift Lightspeed](https://lzh-rh.github.io/ai-runs-here/articles/connect-openshift-lightspeed-to-mcp-gateway/)
+
+*Last updated: 2026-11-18*
